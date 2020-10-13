@@ -34,6 +34,7 @@ maximize routing revenue.
 ## How to use
 
 ### Requirements
+* `go` 1.13
 * `lnd` version 0.11.0-beta or above.
 
 ### Configuration
