@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 
 	"github.com/lightningnetwork/lnd/routing/route"
-	"go.uber.org/zap"
 
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 
@@ -19,14 +19,14 @@ import (
 	"gopkg.in/macaroon.v2"
 )
 
-type lndclient struct {
+type lndclientGrpc struct {
 	conn *grpc.ClientConn
 
 	main   lnrpc.LightningClient
 	router routerrpc.RouterClient
 }
 
-func newLndClient(ctx *cli.Context) (*lndclient, error) {
+func newLndClient(ctx *cli.Context) (*lndclientGrpc, error) {
 	// First, we'll parse the args from the command.
 	tlsCertPath, macPath, err := extractPathArgs(ctx)
 	if err != nil {
@@ -73,14 +73,14 @@ func newLndClient(ctx *cli.Context) (*lndclient, error) {
 			"unable to connect to RPC server: %v", err)
 	}
 
-	return &lndclient{
+	return &lndclientGrpc{
 		conn:   conn,
 		main:   lnrpc.NewLightningClient(conn),
 		router: routerrpc.NewRouterClient(conn),
 	}, nil
 }
 
-func (l *lndclient) getIdentity() (route.Vertex, error) {
+func (l *lndclientGrpc) getIdentity() (route.Vertex, error) {
 	ctx, cancel := context.WithTimeout(ctxb, rpcTimeout)
 	defer cancel()
 
@@ -96,11 +96,12 @@ type channelEdge struct {
 	node1Pub, node2Pub route.Vertex
 }
 
-func (l *lndclient) getChanInfo(channel uint64) (*channelEdge, error) {
+func (l *lndclientGrpc) getChanInfo(channel uint64) (*channelEdge, error) {
 	ctx, cancel := context.WithTimeout(ctxb, rpcTimeout)
 	defer cancel()
 
-	log.Debug("Retrieving channel info", zap.Uint64("channel", channel))
+	log.Debugw("Retrieving channel info",
+		"channel", channel)
 
 	info, err := l.main.GetChanInfo(ctx, &lnrpc.ChanInfoRequest{
 		ChanId: channel,
@@ -125,6 +126,40 @@ func (l *lndclient) getChanInfo(channel uint64) (*channelEdge, error) {
 	}, nil
 }
 
-func (l *lndclient) close() {
+func (l *lndclientGrpc) subscribeHtlcEvents(ctx context.Context,
+	in *routerrpc.SubscribeHtlcEventsRequest) (
+	routerrpc.Router_SubscribeHtlcEventsClient, error) {
+
+	return l.router.SubscribeHtlcEvents(ctx, in)
+}
+
+func (l *lndclientGrpc) htlcInterceptor(ctx context.Context) (
+	routerrpc.Router_HtlcInterceptorClient, error) {
+
+	return l.router.HtlcInterceptor(ctx)
+}
+
+func (l *lndclientGrpc) close() {
 	l.conn.Close()
+}
+
+func (l *lndclientGrpc) getNodeAlias(key route.Vertex) (string, error) {
+	ctx, cancel := context.WithTimeout(ctxb, rpcTimeout)
+	defer cancel()
+
+	log.Debugw("Retrieving node info",
+		"key", key)
+
+	info, err := l.main.GetNodeInfo(ctx, &lnrpc.NodeInfoRequest{
+		PubKey: key.String(),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if info.Node == nil {
+		return "", errors.New("node info not available")
+	}
+
+	return info.Node.Alias, nil
 }

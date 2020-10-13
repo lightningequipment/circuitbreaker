@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"time"
 
 	"github.com/lightningnetwork/lnd/routing/route"
 	"go.uber.org/zap"
@@ -18,11 +19,43 @@ type yamlGroup struct {
 type yamlConfig struct {
 	MaxPendingHtlcs int         `yaml:"maxPendingHtlcs"`
 	Groups          []yamlGroup `yaml:"groups"`
+	HoldFee         holdFee     `yaml:"holdFee"`
+}
+
+type holdFee struct {
+	BaseSatPerHr      int64       `yaml:"baseSatPerHr"`
+	RatePpmPerHr      int         `yaml:"ratePpmPerHr"`
+	ReportingInterval yamlTimeDur `yaml:"reportingInterval"`
+}
+
+type yamlTimeDur time.Duration
+
+func (t *yamlTimeDur) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var tm string
+	if err := unmarshal(&tm); err != nil {
+		return err
+	}
+
+	td, err := time.ParseDuration(tm)
+	if err != nil {
+		return fmt.Errorf("failed to parse '%s' to time.Duration: %v", tm, err)
+	}
+
+	*t = yamlTimeDur(td)
+	return nil
+}
+
+func (t *yamlTimeDur) Duration() time.Duration {
+	return time.Duration(*t)
 }
 
 type config struct {
 	MaxPendingHtlcs        int
 	MaxPendingHtlcsPerPeer map[route.Vertex]int
+
+	BaseSatPerHr      int64
+	RatePpmPerHr      int
+	ReportingInterval time.Duration
 }
 
 var defaultConfig = config{
@@ -62,6 +95,9 @@ func (c *configLoader) load() (*config, error) {
 	config := config{
 		MaxPendingHtlcs:        yamlCfg.MaxPendingHtlcs,
 		MaxPendingHtlcsPerPeer: make(map[route.Vertex]int),
+		BaseSatPerHr:           yamlCfg.HoldFee.BaseSatPerHr,
+		RatePpmPerHr:           yamlCfg.HoldFee.RatePpmPerHr,
+		ReportingInterval:      time.Duration(yamlCfg.HoldFee.ReportingInterval),
 	}
 
 	for _, group := range yamlCfg.Groups {
@@ -82,7 +118,8 @@ func (c *configLoader) load() (*config, error) {
 		}
 	}
 
-	log.Info("Read config file", zap.String("file", c.path))
+	log.Infow("Read config file",
+		"file", c.path)
 
 	return &config, nil
 }
