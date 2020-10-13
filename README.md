@@ -8,7 +8,7 @@ per-peer basis. Known and trusted peers for example can be assigned a higher
 maximum, while a new channel from a previously unseen node may be limited to
 only a few pending htlcs.
 
-Why are limits needed?
+## Why are limits needed?
 
 In today's Lighting Network payments are routed via a series of hops. Each of
 those hops will incur a cost for forwarding that payment. While the htlc of an
@@ -31,6 +31,33 @@ This is where `circuitbreaker` comes in. It puts up a defense around that
 valuable channel liquidity and helps to keep the locked coins at work to
 maximize routing revenue.
 
+## Hold fees
+
+An alternative to lowering limits is to charge peers for the actual costs that
+they generate in both the success and failure cases. For more information about
+this idea, see thread [Hold fees: 402 Payment Required for Lightning
+itself](https://lists.linuxfoundation.org/pipermail/lightning-dev/2020-October/002826.html)
+on the `lightning-dev` mailing list.
+
+Circuit Breaker does not support 'breaking the circuits' when hold fees aren't
+paid, but this is a potential direction for the future. It would roughly entail
+requiring peers to deposit money for hold fees and blocking forwards once the
+peer's balance is zero.
+
+What is currently implemented is only the reporting of these (virtual) hold
+fees. A fee schedule can be defined (see configuration below) and the hold fee
+that _could have been charged_ is logged for every forward. Additionally a
+periodic report is printed that contains the hold fees charged to peers during
+the reporting period. Peers that did not offer any htlcs in that period will be
+omitted.
+
+```log
+2020-10-17T20:45:15.708+0200	INFO	Forwarding htlc	{"channel": 39778131669745664, "htlc": 52, "peer_alias": "tester", "peer": "03afe7da13950201562df3fdd6c8b209aab248daee82d773b9dadebba3eeecbb4c", "pending_htlcs": 1, "max_pending_htlcs": 5}
+2020-10-17T20:45:15.852+0200	INFO	Resolving htlc	{"channel": 39778131669745664, "htlc": 52, "peer_alias": "tester", "peer": "03afe7da13950201562df3fdd6c8b209aab248daee82d773b9dadebba3eeecbb4c", "pending_htlcs": 0, "hold_time": "143.396033ms", "hold_fee_msat": 4}
+2020-10-17T20:45:20.000+0200	INFO	Hold fees report	{"next_report_time": "2020-10-17T20:45:25.000+0200"}
+2020-10-17T20:45:20.000+0200	INFO	Report	{"peer_alias": "tester", "peer": "03afe7da13950201562df3fdd6c8b209aab248daee82d773b9dadebba3eeecbb4c", "total_fees_msat": 74, "interval_fees_msat": 4}
+```
+
 ## How to use
 
 ### Requirements
@@ -40,20 +67,45 @@ maximize routing revenue.
 ### Configuration
 `circuitbreaker` by default reads its configuration from `~/.circuitbreaker/circuitbreaker.yaml`. 
 
-Below is an example of a configuration that limits the number of pending htlcs
-to five by default. For two peers, the limit is lowered to two. A last peer is
-allowed to have up to a hundred htlcs in-flight.
-```
+This is an example configuration:
+
+```yaml
+# Default max pendings htlcs. Limit the number of pending htlcs to five by
+# default.
 maxPendingHtlcs: 5
 
+# Define exception groups. For two peers, the limit is lowered to two. A last
+# peer is allowed to have up to a hundred htlcs in-flight.
 groups:
   - maxPendingHtlcs: 2
     peers:
     - 033220600ae3949f40739955948ca43fc60174c9c51fb51e6debfc27091e58cebe
-    - 021561e3cf45345052912c88b0df7deb7c2ec4a1cf08333edb1ed8dbb3fd203d77
-  - maxPendingHtlcs: 100
+    - 033220600ae3949f40739955948ca43fc60174c9c51fb51e6debfc27091e58ceba
+  - maxPendingHtlcs: 3
     peers:
-    - 02674dabd68df75f78b6b6dc35dd49dd70db5293ca7a68f9cafa76adafabd5dc7c
+    - 033220600ae3949f40739955948ca43fc60174c9c51fb51e6debfc27091e58cebf
+
+# Define hold fee so that a fully locked 1 BTC channel would yield ~8.5%
+# annually.
+#
+# The hold fee is not actually paid by channel peers and currently only exists
+# to raise awareness of the costs of long-holding htlcs.
+holdFee:
+  # Set the base hold fee to 500 sat per hour to compensate for the usage of an
+  # htlc slot. If an imaginary channel of 1 BTC would have all of its 483 slots
+  # occupied for a full year, the total hold fee would be 24 * 365 * 483 =
+  # 4231080 sats. This translates to a yearly return on the staked bitcoin of
+  # ~4.2%.
+  baseSatPerHr: 1
+
+  # Set the hold fee rate to 5 parts per million. If an imaginary channel of 1
+  # BTC would have all of its funds time-locked for a full year, the total hold
+  # fee would be 24 * 365 * 100000000 * 5 / 1000000 = 4380000. This translates
+  # to a yearly return on the staked bitcoin of ~4.4%.
+  ratePpmPerHr: 5
+
+  # Report (virtually) collected hold fees once per hour.
+  reportingInterval: 1h
 ```
 
 ### Run

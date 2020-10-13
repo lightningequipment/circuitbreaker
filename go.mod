@@ -6,6 +6,7 @@ require (
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/lightninglabs/protobuf-hex-display v1.3.3-0.20191212020323-b444784ce75d
 	github.com/lightningnetwork/lnd v0.11.1-beta.rc3
+	github.com/stretchr/testify v1.5.1
 	github.com/urfave/cli v1.22.4
 	go.uber.org/zap v1.14.1
 	google.golang.org/grpc v1.27.0

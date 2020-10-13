@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/user"
@@ -10,7 +11,6 @@ import (
 	"github.com/btcsuite/btcutil"
 	"github.com/lightningnetwork/lnd/build"
 	"github.com/urfave/cli"
-	"go.uber.org/zap"
 
 	"google.golang.org/grpc"
 )
@@ -136,11 +136,11 @@ func main() {
 		defer client.close()
 
 		p := newProcess()
-		return p.run(client, config)
+		return p.run(context.Background(), client, config)
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		log.Error("Unexpected exit", zap.Error(err))
+		log.Errorw("Unexpected exit", "err", err)
 	}
 }
 
