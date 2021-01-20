@@ -91,7 +91,7 @@ groups:
 # The hold fee is not actually paid by channel peers and currently only exists
 # to raise awareness of the costs of long-holding htlcs.
 holdFee:
-  # Set the base hold fee to 500 sat per hour to compensate for the usage of an
+  # Set the base hold fee to 1 sat per hour to compensate for the usage of an
   # htlc slot. If an imaginary channel of 1 BTC would have all of its 483 slots
   # occupied for a full year, the total hold fee would be 24 * 365 * 483 =
   # 4231080 sats. This translates to a yearly return on the staked bitcoin of
