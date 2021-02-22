@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -90,6 +91,10 @@ func (c *configLoader) load() (*config, error) {
 	err = yaml.UnmarshalStrict(yamlFile, &yamlCfg)
 	if err != nil {
 		return nil, err
+	}
+
+	if yamlCfg.HoldFee.ReportingInterval == 0 {
+		return nil, errors.New("reportingInterval not set")
 	}
 
 	config := config{
