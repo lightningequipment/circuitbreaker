@@ -149,6 +149,8 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 
 			alias := p.getNodeAlias(peer)
 
+			peerCfg := cfg.forPeer(peer)
+
 			pending, ok := pendingHtlcs[peer]
 			if !ok {
 				pending = &peerInfo{
@@ -157,10 +159,7 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				pendingHtlcs[peer] = pending
 			}
 
-			maxPending, ok := cfg.MaxPendingHtlcsPerPeer[peer]
-			if !ok {
-				maxPending = cfg.MaxPendingHtlcs
-			}
+			maxPending := peerCfg.MaxPendingHtlcs
 
 			if len(pending.htlcs) >= maxPending {
 				log.Infow("Rejecting htlc",
