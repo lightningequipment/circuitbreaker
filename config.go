@@ -105,10 +105,6 @@ func (c *configLoader) load() (*config, error) {
 		return nil, err
 	}
 
-	if yamlCfg.HoldFee.ReportingInterval == 0 {
-		return nil, errors.New("reportingInterval not set")
-	}
-
 	parseGroupConfig := func(cfg *yamlGroupConfig) groupConfig {
 		return groupConfig{
 			MaxPendingHtlcs: cfg.MaxPendingHtlcs,

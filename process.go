@@ -131,14 +131,20 @@ type peerInfo struct {
 func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 	pendingHtlcs := make(map[route.Vertex]*peerInfo)
 
-	intervalNs := int64(cfg.ReportingInterval)
-	nextReport := time.Unix(0, (time.Now().UnixNano()/intervalNs+1)*
-		intervalNs)
+	var nextReport time.Time
+	if cfg.ReportingInterval != 0 {
+		nextReport = time.Now().Add(cfg.ReportingInterval)
 
-	log.Infow("First hold fees report scheduled", "next_report_time", nextReport)
+		log.Infow("First hold fees report scheduled", "next_report_time", nextReport)
+	} else {
+		log.Infow("Hold fee reporting disabled")
+	}
 
 	for {
-		timeToReport := nextReport.Sub(time.Now())
+		var reportEvent <-chan time.Time
+		if !nextReport.IsZero() {
+			reportEvent = time.After(nextReport.Sub(time.Now()))
+		}
 
 		select {
 		case interceptEvent := <-p.interceptChan:
@@ -227,7 +233,7 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				"hold_time", holdTime,
 				"hold_fee_msat", holdFeeMsat)
 
-		case <-time.After(timeToReport):
+		case <-reportEvent:
 			changedPeers := []route.Vertex{}
 			for key, info := range pendingHtlcs {
 				if info.intervalHoldFees > 0 {

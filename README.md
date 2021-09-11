@@ -51,6 +51,8 @@ periodic report is printed that contains the hold fees charged to peers during
 the reporting period. Peers that did not offer any htlcs in that period will be
 omitted.
 
+When `reportingInterval` is not set, no hold fee reporting will take place.
+
 ```log
 2020-10-17T20:45:15.708+0200	INFO	Forwarding htlc	{"channel": 39778131669745664, "htlc": 52, "peer_alias": "tester", "peer": "03afe7da13950201562df3fdd6c8b209aab248daee82d773b9dadebba3eeecbb4c", "pending_htlcs": 1, "max_pending_htlcs": 5}
 2020-10-17T20:45:15.852+0200	INFO	Resolving htlc	{"channel": 39778131669745664, "htlc": 52, "peer_alias": "tester", "peer": "03afe7da13950201562df3fdd6c8b209aab248daee82d773b9dadebba3eeecbb4c", "pending_htlcs": 0, "hold_time": "143.396033ms", "hold_fee_msat": 4}
