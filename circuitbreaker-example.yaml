@@ -1,17 +1,35 @@
 # Default max pendings htlcs. Limit the number of pending htlcs to five by
-# default. Set to zero for no limit.
+# default. Set to zero for no limit. 
 maxPendingHtlcs: 5
 
-# Define exception groups. For two peers, the limit is lowered to two. A last
-# peer is allowed to have up to a hundred htlcs in-flight.
+# Default minimum interval between htlcs that is enforced per peer. If htlcs
+# come in faster than that, they are cancelled back. Leave unset for no limit.
+htlcMinInterval: 1s
+
+# Default htlc burst size per peer. This many htlcs are allowed through in a
+# burst, but longer delays will be enforced afterwards to keep true to the
+# minimum interval defined above. If not set, a burst size of 1 will be used.
+# For more info, see the Token Bucket Algorithm
+# https://en.wikipedia.org/wiki/Token_bucket.
+htlcBurstSize: 10
+
+# Define exception groups. Note that the configuration of the exception group
+# does not inherit from the defaults above. So for example not setting a rate
+# limit really means no rate limit, even if there is a default configured.
 groups:
+  # For two peers, the pending and rate limits are
+  # lowered.
   - maxPendingHtlcs: 2
+    htlcMinInterval: 5s
+    htlcBurstSize: 3
     peers:
-    - 033220600ae3949f40739955948ca43fc60174c9c51fb51e6debfc27091e58cebe
-    - 033220600ae3949f40739955948ca43fc60174c9c51fb51e6debfc27091e58ceba
-  - maxPendingHtlcs: 3
+    - 03901a1fcfbf621245d859fe4b8bfd93c9e8191a93612db3db0efd11af64e226a2
+    - 03670eff2ccfd3a469536d8e3d38825313d266fa3c2d22b1f841beca30414586d0
+
+  # A last peer is allowed to have more pending htlcs and no rate limit.
+  - maxPendingHtlcs: 25
     peers:
-    - 033220600ae3949f40739955948ca43fc60174c9c51fb51e6debfc27091e58cebf
+    - 035cb74e3232e98ba6a866c485f1076dca5e42147dc1e3fbf9ea7241d359988e4d
 
 # Define hold fee so that a fully locked 1 BTC channel would yield ~8.5%
 # annually.

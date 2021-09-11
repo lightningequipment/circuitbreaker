@@ -9,6 +9,7 @@ import (
 	"github.com/lightninglabs/protobuf-hex-display/proto"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
+	"golang.org/x/time/rate"
 )
 
 const maxPending = 1
@@ -53,6 +54,8 @@ type process struct {
 	identity  route.Vertex
 	pubkeyMap map[uint64]route.Vertex
 	aliasMap  map[route.Vertex]string
+
+	limiters map[route.Vertex]*rate.Limiter
 }
 
 func newProcess() *process {
@@ -61,6 +64,7 @@ func newProcess() *process {
 		resolveChan:   make(chan circuitKey),
 		pubkeyMap:     make(map[uint64]route.Vertex),
 		aliasMap:      make(map[route.Vertex]string),
+		limiters:      make(map[route.Vertex]*rate.Limiter),
 	}
 }
 
@@ -128,6 +132,26 @@ type peerInfo struct {
 	intervalHoldFees int64
 }
 
+func (p *process) rateLimit(peer route.Vertex, cfg *groupConfig) bool {
+	// Skip if no interval set.
+	if cfg.HtlcMinInterval == 0 {
+		return false
+	}
+
+	// Get or create rate limiter with config that applies to this peer.
+	limiter, ok := p.limiters[peer]
+	if !ok {
+		limiter = rate.NewLimiter(
+			rate.Every(cfg.HtlcMinInterval),
+			cfg.HtlcBurstSize,
+		)
+		p.limiters[peer] = limiter
+	}
+
+	// Apply rate limit.
+	return !limiter.Allow()
+}
+
 func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 	pendingHtlcs := make(map[route.Vertex]*peerInfo)
 
@@ -164,6 +188,17 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 
 			peerCfg := cfg.forPeer(peer)
 
+			if p.rateLimit(peer, peerCfg) {
+				logger.Infow("Rejecting htlc because of rate limit",
+					"htlc_min_interval", peerCfg.HtlcMinInterval,
+					"htlc_burst_size", peerCfg.HtlcBurstSize,
+				)
+
+				interceptEvent.resume <- false
+				continue
+			}
+
+			// Apply max htlc limit.
 			pending, ok := pendingHtlcs[peer]
 			if !ok {
 				pending = &peerInfo{

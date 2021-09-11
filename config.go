@@ -12,7 +12,9 @@ import (
 )
 
 type yamlGroupConfig struct {
-	MaxPendingHtlcs int `yaml:"maxPendingHtlcs"`
+	MaxPendingHtlcs int           `yaml:"maxPendingHtlcs"`
+	HtlcMinInterval time.Duration `yaml:"htlcMinInterval"`
+	HtlcBurstSize   int           `yaml:"htlcBurstSize"`
 }
 
 type yamlGroup struct {
@@ -57,6 +59,9 @@ func (t *yamlTimeDur) Duration() time.Duration {
 
 type groupConfig struct {
 	MaxPendingHtlcs int
+
+	HtlcMinInterval time.Duration
+	HtlcBurstSize   int
 }
 
 type config struct {
@@ -106,8 +111,15 @@ func (c *configLoader) load() (*config, error) {
 	}
 
 	parseGroupConfig := func(cfg *yamlGroupConfig) groupConfig {
+		burstSize := cfg.HtlcBurstSize
+		if burstSize == 0 {
+			burstSize = 1
+		}
+
 		return groupConfig{
 			MaxPendingHtlcs: cfg.MaxPendingHtlcs,
+			HtlcMinInterval: cfg.HtlcMinInterval,
+			HtlcBurstSize:   burstSize,
 		}
 	}
 
