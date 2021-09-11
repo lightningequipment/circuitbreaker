@@ -53,3 +53,49 @@ func TestProcess(t *testing.T) {
 	cancel()
 	require.NoError(t, <-exit)
 }
+
+func TestRateLimit(t *testing.T) {
+	p := newProcess()
+
+	cfg := &config{
+		groupConfig: groupConfig{
+			HtlcMinInterval: time.Minute,
+			HtlcBurstSize:   2,
+		},
+	}
+
+	client := newLndclientMock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	exit := make(chan error)
+	go func() {
+		exit <- p.run(ctx, client, cfg)
+	}()
+
+	key := &routerrpc.CircuitKey{
+		ChanId: 2,
+		HtlcId: 5,
+	}
+	interceptReq := &routerrpc.ForwardHtlcInterceptRequest{
+		IncomingCircuitKey: key,
+	}
+
+	// First htlc accepted.
+	client.htlcInterceptorRequests <- interceptReq
+	resp := <-client.htlcInterceptorResponses
+	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
+
+	// Second htlc right after is also accepted because of burst size 2.
+	client.htlcInterceptorRequests <- interceptReq
+	resp = <-client.htlcInterceptorResponses
+	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
+
+	// Third htlc again right after should be rejected.
+	client.htlcInterceptorRequests <- interceptReq
+	resp = <-client.htlcInterceptorResponses
+	require.Equal(t, routerrpc.ResolveHoldForwardAction_FAIL, resp.Action)
+
+	cancel()
+	require.NoError(t, <-exit)
+}

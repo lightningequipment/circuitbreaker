@@ -3,10 +3,20 @@
 `circuitbreaker` is to Lightning what firewalls are to the internet.
 
 It allows nodes to protect themselves from being flooded with htlcs. With
-`circuitbreaker` a maximum to the number of in-flight htlcS can be set on a
+`circuitbreaker` a maximum to the number of in-flight htlcs can be set on a
 per-peer basis. Known and trusted peers for example can be assigned a higher
 maximum, while a new channel from a previously unseen node may be limited to
 only a few pending htlcs.
+
+Furthermore it is possible to apply rate limits to the number of forwarded
+htlcs. This offers protection against DoS/spam attacks that rely on large
+numbers of fast-resolving htlcs. Rate limiting is implemented with a [Token
+bucket](https://en.wikipedia.org/wiki/Token_bucket). In configuration the
+minimum interval between htlcs and a burst size can be specified.
+
+Large numbers of htlcs are also required for probing channel balances. Reducing the
+information leakage through probing could be another reason to put in place a
+rate limit for untrusted peers.
 
 ## Why are limits needed?
 
