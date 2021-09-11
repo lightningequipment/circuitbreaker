@@ -1,5 +1,5 @@
 # Default max pendings htlcs. Limit the number of pending htlcs to five by
-# default.
+# default. Set to zero for no limit.
 maxPendingHtlcs: 5
 
 # Define exception groups. For two peers, the limit is lowered to two. A last

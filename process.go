@@ -167,7 +167,7 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 
 			maxPending := peerCfg.MaxPendingHtlcs
 
-			if len(pending.htlcs) >= maxPending {
+			if maxPending > 0 && len(pending.htlcs) >= maxPending {
 				log.Infow("Rejecting htlc",
 					"channel", interceptEvent.channel,
 					"htlc", interceptEvent.htlc,
