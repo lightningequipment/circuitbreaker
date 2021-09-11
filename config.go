@@ -8,19 +8,24 @@ import (
 	"time"
 
 	"github.com/lightningnetwork/lnd/routing/route"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
 
+type yamlGroupConfig struct {
+	MaxPendingHtlcs int `yaml:"maxPendingHtlcs"`
+}
+
 type yamlGroup struct {
-	MaxPendingHtlcs int      `yaml:"maxPendingHtlcs"`
-	Peers           []string `yaml:"peers"`
+	yamlGroupConfig `yaml:",inline"`
+
+	Peers []string `yaml:"peers"`
 }
 
 type yamlConfig struct {
-	MaxPendingHtlcs int         `yaml:"maxPendingHtlcs"`
-	Groups          []yamlGroup `yaml:"groups"`
-	HoldFee         holdFee     `yaml:"holdFee"`
+	yamlGroupConfig `yaml:",inline"`
+
+	Groups  []yamlGroup `yaml:"groups"`
+	HoldFee holdFee     `yaml:"holdFee"`
 }
 
 type holdFee struct {
@@ -50,17 +55,27 @@ func (t *yamlTimeDur) Duration() time.Duration {
 	return time.Duration(*t)
 }
 
+type groupConfig struct {
+	MaxPendingHtlcs int
+}
+
 type config struct {
-	MaxPendingHtlcs        int
-	MaxPendingHtlcsPerPeer map[route.Vertex]int
+	groupConfig
+
+	PerPeer map[route.Vertex]groupConfig
 
 	BaseSatPerHr      int64
 	RatePpmPerHr      int
 	ReportingInterval time.Duration
 }
 
-var defaultConfig = config{
-	MaxPendingHtlcs: 1,
+// forPeer returns the config for a specific peer.
+func (c *config) forPeer(peer route.Vertex) *groupConfig {
+	if cfg, ok := c.PerPeer[peer]; ok {
+		return &cfg
+	}
+
+	return &c.groupConfig
 }
 
 type configLoader struct {
@@ -76,10 +91,7 @@ func newConfigLoader(path string) *configLoader {
 
 func (c *configLoader) load() (*config, error) {
 	if _, err := os.Stat(c.path); os.IsNotExist(err) {
-		log.Debug("No config file, using defaults",
-			zap.String("file", c.path))
-
-		return &defaultConfig, nil
+		return nil, errors.New("no config file")
 	}
 
 	yamlFile, err := ioutil.ReadFile(c.path)
@@ -97,12 +109,18 @@ func (c *configLoader) load() (*config, error) {
 		return nil, errors.New("reportingInterval not set")
 	}
 
+	parseGroupConfig := func(cfg *yamlGroupConfig) groupConfig {
+		return groupConfig{
+			MaxPendingHtlcs: cfg.MaxPendingHtlcs,
+		}
+	}
+
 	config := config{
-		MaxPendingHtlcs:        yamlCfg.MaxPendingHtlcs,
-		MaxPendingHtlcsPerPeer: make(map[route.Vertex]int),
-		BaseSatPerHr:           yamlCfg.HoldFee.BaseSatPerHr,
-		RatePpmPerHr:           yamlCfg.HoldFee.RatePpmPerHr,
-		ReportingInterval:      time.Duration(yamlCfg.HoldFee.ReportingInterval),
+		groupConfig:       parseGroupConfig(&yamlCfg.yamlGroupConfig),
+		PerPeer:           make(map[route.Vertex]groupConfig),
+		BaseSatPerHr:      yamlCfg.HoldFee.BaseSatPerHr,
+		RatePpmPerHr:      yamlCfg.HoldFee.RatePpmPerHr,
+		ReportingInterval: time.Duration(yamlCfg.HoldFee.ReportingInterval),
 	}
 
 	for _, group := range yamlCfg.Groups {
@@ -112,14 +130,15 @@ func (c *configLoader) load() (*config, error) {
 				return nil, err
 			}
 
-			_, exists := config.MaxPendingHtlcsPerPeer[peerPubkey]
+			_, exists := config.PerPeer[peerPubkey]
 			if exists {
 				return nil, fmt.Errorf("peer %v in multiple groups",
 					peerPubkey)
 			}
 
-			config.MaxPendingHtlcsPerPeer[peerPubkey] =
-				group.MaxPendingHtlcs
+			config.PerPeer[peerPubkey] = parseGroupConfig(
+				&group.yamlGroupConfig,
+			)
 		}
 	}
 
