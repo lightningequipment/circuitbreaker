@@ -155,6 +155,13 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 
 			alias := p.getNodeAlias(peer)
 
+			logger := log.With(
+				"channel", interceptEvent.channel,
+				"htlc", interceptEvent.htlc,
+				"peer_alias", alias,
+				"peer", peer.String(),
+			)
+
 			peerCfg := cfg.forPeer(peer)
 
 			pending, ok := pendingHtlcs[peer]
@@ -168,11 +175,7 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 			maxPending := peerCfg.MaxPendingHtlcs
 
 			if maxPending > 0 && len(pending.htlcs) >= maxPending {
-				log.Infow("Rejecting htlc",
-					"channel", interceptEvent.channel,
-					"htlc", interceptEvent.htlc,
-					"peer_alias", alias,
-					"peer", peer.String(),
+				logger.Infow("Rejecting htlc",
 					"pending_htlcs", len(pending.htlcs),
 					"max_pending_htlcs", maxPending,
 				)
@@ -186,13 +189,8 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				valueMsat: interceptEvent.valueMsat,
 			}
 
-			log.Infow("Forwarding htlc",
-				"channel", interceptEvent.channel,
-				"htlc", interceptEvent.htlc,
-				"peer_alias", alias,
-				"peer", peer.String(),
+			logger.Infow("Forwarding htlc",
 				"pending_htlcs", len(pending.htlcs),
-				"max_pending_htlcs", maxPending,
 			)
 
 			interceptEvent.resume <- true
