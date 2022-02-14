@@ -87,6 +87,10 @@ An example configuration can be found [here](circuitbreaker-example.yaml)
 * Execute `circuitbreaker` with the correct command line flags to connect to
   `lnd`. See `circuitbreaker --help` for details.
 
+### Installation guide
+
+* [Circuit Breaker on the RaspiBolt](https://raspibolt.org/bonus/lightning/circuit-breaker.html): Manually install Circuit Breaker on any Debian-based OS.
+
 ## Limitations
 * This software is alpha quality. Use at your own risk and be careful in particular on mainnet.
 * The interfaces on `lnd` aren't optimized for this purpose. Therefore the use
