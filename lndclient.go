@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/lightningnetwork/lnd/routing/route"
-
-	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
-
 	"github.com/lightningnetwork/lnd/lncfg"
 	"github.com/lightningnetwork/lnd/lnrpc"
+	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/macaroons"
+	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/urfave/cli"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -58,7 +56,10 @@ func newLndClient(ctx *cli.Context) (*lndclientGrpc, error) {
 	}
 
 	// Now we append the macaroon credentials to the dial options.
-	cred := macaroons.NewMacaroonCredential(mac)
+	cred, err := macaroons.NewMacaroonCredential(mac)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create mac credential: %w", err)
+	}
 	opts = append(opts, grpc.WithPerRPCCredentials(cred))
 
 	// We need to use a custom dialer so we can also connect to unix sockets
