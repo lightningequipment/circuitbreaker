@@ -1,0 +1,19 @@
+name: Tests
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+    container: golang:1.17
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+
+      - name: Run tests
+        run: go test -cover ./...
