@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -96,7 +95,7 @@ func newConfigLoader(path string) *configLoader {
 
 func (c *configLoader) load() (*config, error) {
 	if _, err := os.Stat(c.path); os.IsNotExist(err) {
-		return nil, errors.New("no config file")
+		return nil, fmt.Errorf("no config file at %v", c.path)
 	}
 
 	yamlFile, err := ioutil.ReadFile(c.path)
