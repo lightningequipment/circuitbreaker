@@ -247,22 +247,29 @@ func (p *process) processHtlcEvents(stream routerrpc.Router_SubscribeHtlcEventsC
 			return err
 		}
 
-		if event.EventType != routerrpc.HtlcEvent_FORWARD {
-			continue
-		}
-
 		switch event.Event.(type) {
 		case *routerrpc.HtlcEvent_SettleEvent:
+			if event.EventType != routerrpc.HtlcEvent_FORWARD {
+				break
+			}
+
 			p.resolveChan <- circuitKey{
 				channel: event.IncomingChannelId,
 				htlc:    event.IncomingHtlcId,
 			}
 
 		case *routerrpc.HtlcEvent_ForwardFailEvent:
+			if event.EventType != routerrpc.HtlcEvent_FORWARD {
+				break
+			}
+
 			p.resolveChan <- circuitKey{
 				channel: event.IncomingChannelId,
 				htlc:    event.IncomingHtlcId,
 			}
+
+		case *routerrpc.HtlcEvent_RevocationWindowExhausted:
+			log.Infow("Revocation window exhausted", "chanId", event.OutgoingChannelId)
 		}
 	}
 }
