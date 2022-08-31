@@ -4,7 +4,6 @@ go 1.17
 
 require (
 	github.com/btcsuite/btcutil v1.0.3-0.20210527170813-e2ba6805a890
-	github.com/lightninglabs/protobuf-hex-display v1.4.3-hex-display
 	github.com/lightningnetwork/lnd v0.14.3-beta
 	github.com/stretchr/testify v1.7.0
 	github.com/urfave/cli v1.22.4
