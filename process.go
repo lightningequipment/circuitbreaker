@@ -7,7 +7,6 @@ import (
 
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
-	"golang.org/x/time/rate"
 )
 
 var (
@@ -51,7 +50,7 @@ type process struct {
 	pubkeyMap map[uint64]route.Vertex
 	aliasMap  map[route.Vertex]string
 
-	limiters map[route.Vertex]*rate.Limiter
+	limiters map[route.Vertex]*rateLimit
 
 	cfg *config
 }
@@ -62,7 +61,7 @@ func newProcess(client lndclient, cfg *config) *process {
 		resolveChan:   make(chan circuitKey),
 		pubkeyMap:     make(map[uint64]route.Vertex),
 		aliasMap:      make(map[route.Vertex]string),
-		limiters:      make(map[route.Vertex]*rate.Limiter),
+		limiters:      make(map[route.Vertex]*rateLimit),
 		cfg:           cfg,
 		client:        client,
 	}
@@ -126,8 +125,8 @@ func (p *process) rateLimit(peer route.Vertex, cfg *groupConfig) bool {
 	// Get or create rate limiter with config that applies to this peer.
 	limiter, ok := p.limiters[peer]
 	if !ok {
-		limiter = rate.NewLimiter(
-			rate.Every(cfg.HtlcMinInterval),
+		limiter = newRateLimit(
+			cfg.HtlcMinInterval,
 			cfg.HtlcBurstSize,
 		)
 		p.limiters[peer] = limiter
