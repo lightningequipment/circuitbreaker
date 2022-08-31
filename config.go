@@ -41,15 +41,6 @@ type config struct {
 	PerPeer map[route.Vertex]groupConfig
 }
 
-// forPeer returns the config for a specific peer.
-func (c *config) forPeer(peer route.Vertex) *groupConfig {
-	if cfg, ok := c.PerPeer[peer]; ok {
-		return &cfg
-	}
-
-	return &c.groupConfig
-}
-
 type configLoader struct {
 	path string
 }

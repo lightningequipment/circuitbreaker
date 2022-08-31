@@ -52,22 +52,24 @@ type process struct {
 	aliasMap  map[route.Vertex]string
 
 	limiters map[route.Vertex]*rate.Limiter
+
+	cfg *config
 }
 
-func newProcess() *process {
+func newProcess(client lndclient, cfg *config) *process {
 	return &process{
 		interceptChan: make(chan interceptEvent),
 		resolveChan:   make(chan circuitKey),
 		pubkeyMap:     make(map[uint64]route.Vertex),
 		aliasMap:      make(map[route.Vertex]string),
 		limiters:      make(map[route.Vertex]*rate.Limiter),
+		cfg:           cfg,
+		client:        client,
 	}
 }
 
-func (p *process) run(ctx context.Context, client lndclient, cfg *config) error {
+func (p *process) run(ctx context.Context) error {
 	log.Info("CircuitBreaker started")
-
-	p.client = client
 
 	var err error
 	p.identity, err = p.client.getIdentity()
@@ -108,7 +110,7 @@ func (p *process) run(ctx context.Context, client lndclient, cfg *config) error 
 		}
 	}()
 
-	return p.eventLoop(ctx, cfg)
+	return p.eventLoop(ctx)
 }
 
 type peerInfo struct {
@@ -135,7 +137,16 @@ func (p *process) rateLimit(peer route.Vertex, cfg *groupConfig) bool {
 	return !limiter.Allow()
 }
 
-func (p *process) eventLoop(ctx context.Context, cfg *config) error {
+// forPeer returns the config for a specific peer.
+func (p *process) forPeer(peer route.Vertex) *groupConfig {
+	if cfg, ok := p.cfg.PerPeer[peer]; ok {
+		return &cfg
+	}
+
+	return &p.cfg.groupConfig
+}
+
+func (p *process) eventLoop(ctx context.Context) error {
 	pendingHtlcs := make(map[route.Vertex]*peerInfo)
 
 	for {
@@ -155,7 +166,7 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				"peer", peer.String(),
 			)
 
-			peerCfg := cfg.forPeer(peer)
+			peerCfg := p.forPeer(peer)
 
 			if p.rateLimit(peer, peerCfg) {
 				logger.Infow("Rejecting htlc because of rate limit",

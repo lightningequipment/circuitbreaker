@@ -10,8 +10,6 @@ import (
 )
 
 func TestProcess(t *testing.T) {
-	p := newProcess()
-
 	cfg := &config{
 		groupConfig: groupConfig{
 			MaxPendingHtlcs: 2,
@@ -19,12 +17,15 @@ func TestProcess(t *testing.T) {
 	}
 
 	client := newLndclientMock()
+
+	p := newProcess(client, cfg)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx, client, cfg)
+		exit <- p.run(ctx)
 	}()
 
 	key := &routerrpc.CircuitKey{
@@ -52,8 +53,6 @@ func TestProcess(t *testing.T) {
 }
 
 func TestRateLimit(t *testing.T) {
-	p := newProcess()
-
 	cfg := &config{
 		groupConfig: groupConfig{
 			HtlcMinInterval: time.Minute,
@@ -62,12 +61,15 @@ func TestRateLimit(t *testing.T) {
 	}
 
 	client := newLndclientMock()
+
+	p := newProcess(client, cfg)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx, client, cfg)
+		exit <- p.run(ctx)
 	}()
 
 	key := &routerrpc.CircuitKey{
