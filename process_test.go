@@ -16,9 +16,6 @@ func TestProcess(t *testing.T) {
 		groupConfig: groupConfig{
 			MaxPendingHtlcs: 2,
 		},
-		BaseSatPerHr:      1,
-		RatePpmPerHr:      5,
-		ReportingInterval: time.Minute * 1,
 	}
 
 	client := newLndclientMock()
