@@ -328,6 +328,12 @@ func (p *process) processHtlcEvents(stream routerrpc.Router_SubscribeHtlcEventsC
 				channel: event.IncomingChannelId,
 				htlc:    event.IncomingHtlcId,
 			}
+			
+		case *routerrpc.HtlcEvent_LinkFailEvent:
+			p.resolveChan <- circuitKey{
+				channel: event.IncomingChannelId,
+				htlc:    event.IncomingHtlcId,
+			}
 		}
 	}
 }
