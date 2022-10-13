@@ -10,6 +10,28 @@ import (
 )
 
 func TestProcess(t *testing.T) {
+	defer Timeout()()
+
+	t.Run("settle", func(t *testing.T) {
+		testProcess(t, resolveEventSettle)
+	})
+	t.Run("forward fail", func(t *testing.T) {
+		testProcess(t, resolveEventForwardFail)
+	})
+	t.Run("link fail", func(t *testing.T) {
+		testProcess(t, resolveEventLinkFail)
+	})
+}
+
+type resolveEvent int
+
+const (
+	resolveEventSettle resolveEvent = iota
+	resolveEventForwardFail
+	resolveEventLinkFail
+)
+
+func testProcess(t *testing.T, event resolveEvent) {
 	p := newProcess()
 
 	resolved := make(chan struct{})
@@ -43,12 +65,24 @@ func TestProcess(t *testing.T) {
 	resp := <-client.htlcInterceptorResponses
 	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
 
-	client.htlcEvents <- &routerrpc.HtlcEvent{
+	htlcEvent := &routerrpc.HtlcEvent{
 		EventType:         routerrpc.HtlcEvent_FORWARD,
 		IncomingChannelId: key.ChanId,
 		IncomingHtlcId:    key.HtlcId,
-		Event:             &routerrpc.HtlcEvent_SettleEvent{},
 	}
+
+	switch event {
+	case resolveEventForwardFail:
+		htlcEvent.Event = &routerrpc.HtlcEvent_ForwardFailEvent{}
+
+	case resolveEventLinkFail:
+		htlcEvent.Event = &routerrpc.HtlcEvent_LinkFailEvent{}
+
+	case resolveEventSettle:
+		htlcEvent.Event = &routerrpc.HtlcEvent_SettleEvent{}
+	}
+
+	client.htlcEvents <- htlcEvent
 
 	<-resolved
 
@@ -57,6 +91,8 @@ func TestProcess(t *testing.T) {
 }
 
 func TestRateLimit(t *testing.T) {
+	defer Timeout()()
+
 	p := newProcess()
 
 	cfg := &config{
