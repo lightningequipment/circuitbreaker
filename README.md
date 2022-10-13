@@ -54,6 +54,7 @@ An example configuration can be found [here](circuitbreaker-example.yaml)
 ### Run
 
 * Clone this repository
+* `cd circuitbreaker/`
 * `go install`
 * Execute `circuitbreaker` with the correct command line flags to connect to
   `lnd`. See `circuitbreaker --help` for details.
