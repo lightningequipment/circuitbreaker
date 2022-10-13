@@ -12,6 +12,11 @@ import (
 func TestProcess(t *testing.T) {
 	p := newProcess()
 
+	resolved := make(chan struct{})
+	p.resolvedCallback = func() {
+		close(resolved)
+	}
+
 	cfg := &config{
 		groupConfig: groupConfig{
 			MaxPendingHtlcs: 2,
@@ -45,7 +50,7 @@ func TestProcess(t *testing.T) {
 		Event:             &routerrpc.HtlcEvent_SettleEvent{},
 	}
 
-	time.Sleep(time.Second)
+	<-resolved
 
 	cancel()
 	require.NoError(t, <-exit)
