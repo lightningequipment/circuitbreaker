@@ -52,6 +52,9 @@ type process struct {
 	aliasMap  map[route.Vertex]string
 
 	limiters map[route.Vertex]*rate.Limiter
+
+	// Testing hook
+	resolvedCallback func()
 }
 
 func newProcess() *process {
@@ -221,6 +224,10 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				"peer", peer.String(),
 				"pending_htlcs", len(pending.htlcs),
 			)
+
+			if p.resolvedCallback != nil {
+				p.resolvedCallback()
+			}
 
 		case <-ctx.Done():
 			log.Info("Exit")
