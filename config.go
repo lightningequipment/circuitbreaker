@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -26,35 +25,7 @@ type yamlGroup struct {
 type yamlConfig struct {
 	yamlGroupConfig `yaml:",inline"`
 
-	Groups  []yamlGroup `yaml:"groups"`
-	HoldFee holdFee     `yaml:"holdFee"`
-}
-
-type holdFee struct {
-	BaseSatPerHr      int64       `yaml:"baseSatPerHr"`
-	RatePpmPerHr      int         `yaml:"ratePpmPerHr"`
-	ReportingInterval yamlTimeDur `yaml:"reportingInterval"`
-}
-
-type yamlTimeDur time.Duration
-
-func (t *yamlTimeDur) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var tm string
-	if err := unmarshal(&tm); err != nil {
-		return err
-	}
-
-	td, err := time.ParseDuration(tm)
-	if err != nil {
-		return fmt.Errorf("failed to parse '%s' to time.Duration: %v", tm, err)
-	}
-
-	*t = yamlTimeDur(td)
-	return nil
-}
-
-func (t *yamlTimeDur) Duration() time.Duration {
-	return time.Duration(*t)
+	Groups []yamlGroup `yaml:"groups"`
 }
 
 type groupConfig struct {
@@ -68,10 +39,6 @@ type config struct {
 	groupConfig
 
 	PerPeer map[route.Vertex]groupConfig
-
-	BaseSatPerHr      int64
-	RatePpmPerHr      int
-	ReportingInterval time.Duration
 }
 
 // forPeer returns the config for a specific peer.
@@ -96,7 +63,7 @@ func newConfigLoader(path string) *configLoader {
 
 func (c *configLoader) load() (*config, error) {
 	if _, err := os.Stat(c.path); os.IsNotExist(err) {
-		return nil, errors.New("no config file")
+		return nil, fmt.Errorf("no config file at %v", c.path)
 	}
 
 	yamlFile, err := ioutil.ReadFile(c.path)
@@ -124,11 +91,8 @@ func (c *configLoader) load() (*config, error) {
 	}
 
 	config := config{
-		groupConfig:       parseGroupConfig(&yamlCfg.yamlGroupConfig),
-		PerPeer:           make(map[route.Vertex]groupConfig),
-		BaseSatPerHr:      yamlCfg.HoldFee.BaseSatPerHr,
-		RatePpmPerHr:      yamlCfg.HoldFee.RatePpmPerHr,
-		ReportingInterval: time.Duration(yamlCfg.HoldFee.ReportingInterval),
+		groupConfig: parseGroupConfig(&yamlCfg.yamlGroupConfig),
+		PerPeer:     make(map[route.Vertex]groupConfig),
 	}
 
 	for _, group := range yamlCfg.Groups {

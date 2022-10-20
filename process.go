@@ -5,14 +5,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/lightninglabs/protobuf-hex-display/jsonpb"
-	"github.com/lightninglabs/protobuf-hex-display/proto"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"golang.org/x/time/rate"
 )
-
-const maxPending = 1
 
 var (
 	rpcTimeout = 10 * time.Second
@@ -56,6 +52,9 @@ type process struct {
 	aliasMap  map[route.Vertex]string
 
 	limiters map[route.Vertex]*rate.Limiter
+
+	// Testing hook
+	resolvedCallback func()
 }
 
 func newProcess() *process {
@@ -70,11 +69,6 @@ func newProcess() *process {
 
 func (p *process) run(ctx context.Context, client lndclient, cfg *config) error {
 	log.Info("CircuitBreaker started")
-	log.Infow("Hold fee",
-		"base", cfg.BaseSatPerHr,
-		"rate", float64(cfg.RatePpmPerHr)/1e6,
-		"reporting_interval", cfg.ReportingInterval,
-	)
 
 	p.client = client
 
@@ -120,16 +114,8 @@ func (p *process) run(ctx context.Context, client lndclient, cfg *config) error 
 	return p.eventLoop(ctx, cfg)
 }
 
-type holdInfo struct {
-	fwdTime   time.Time
-	valueMsat int64
-}
-
 type peerInfo struct {
-	htlcs map[circuitKey]*holdInfo
-
-	totalHoldFees    int64
-	intervalHoldFees int64
+	htlcs map[circuitKey]struct{}
 }
 
 func (p *process) rateLimit(peer route.Vertex, cfg *groupConfig) bool {
@@ -155,21 +141,7 @@ func (p *process) rateLimit(peer route.Vertex, cfg *groupConfig) bool {
 func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 	pendingHtlcs := make(map[route.Vertex]*peerInfo)
 
-	var nextReport time.Time
-	if cfg.ReportingInterval != 0 {
-		nextReport = time.Now().Add(cfg.ReportingInterval)
-
-		log.Infow("First hold fees report scheduled", "next_report_time", nextReport)
-	} else {
-		log.Infow("Hold fee reporting disabled")
-	}
-
 	for {
-		var reportEvent <-chan time.Time
-		if !nextReport.IsZero() {
-			reportEvent = time.After(nextReport.Sub(time.Now()))
-		}
-
 		select {
 		case interceptEvent := <-p.interceptChan:
 			peer, err := p.getPubKey(interceptEvent.channel)
@@ -202,7 +174,7 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 			pending, ok := pendingHtlcs[peer]
 			if !ok {
 				pending = &peerInfo{
-					htlcs: make(map[circuitKey]*holdInfo),
+					htlcs: make(map[circuitKey]struct{}),
 				}
 				pendingHtlcs[peer] = pending
 			}
@@ -219,10 +191,7 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				continue
 			}
 
-			pending.htlcs[interceptEvent.circuitKey] = &holdInfo{
-				fwdTime:   time.Now(),
-				valueMsat: interceptEvent.valueMsat,
-			}
+			pending.htlcs[interceptEvent.circuitKey] = struct{}{}
 
 			logger.Infow("Forwarding htlc",
 				"pending_htlcs", len(pending.htlcs),
@@ -241,21 +210,12 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				continue
 			}
 
-			info, ok := pending.htlcs[resolvedKey]
+			_, ok = pending.htlcs[resolvedKey]
 			if !ok {
 				continue
 			}
 
 			delete(pending.htlcs, resolvedKey)
-
-			holdTime := time.Since(info.fwdTime)
-
-			holdFeeMsat := int64((1000*float64(cfg.BaseSatPerHr) +
-				float64(info.valueMsat)*float64(cfg.RatePpmPerHr)/1e6) *
-				holdTime.Hours())
-
-			pending.totalHoldFees += holdFeeMsat
-			pending.intervalHoldFees += holdFeeMsat
 
 			log.Infow("Resolving htlc",
 				"channel", resolvedKey.channel,
@@ -263,38 +223,10 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				"peer_alias", p.getNodeAlias(peer),
 				"peer", peer.String(),
 				"pending_htlcs", len(pending.htlcs),
-				"hold_time", holdTime,
-				"hold_fee_msat", holdFeeMsat)
+			)
 
-		case <-reportEvent:
-			changedPeers := []route.Vertex{}
-			for key, info := range pendingHtlcs {
-				if info.intervalHoldFees > 0 {
-					changedPeers = append(
-						changedPeers, key,
-					)
-				}
-			}
-
-			nextReport = nextReport.Add(cfg.ReportingInterval)
-
-			if len(changedPeers) == 0 {
-				log.Infow("No hold fees to report",
-					"next_report_time", nextReport)
-			} else {
-				log.Infow("Hold fees report",
-					"next_report_time", nextReport)
-
-				for _, key := range changedPeers {
-					log.Infow("Report",
-						"peer_alias", p.getNodeAlias(key),
-						"peer", key,
-						"total_fees_msat", pendingHtlcs[key].totalHoldFees,
-						"interval_fees_msat", pendingHtlcs[key].intervalHoldFees,
-					)
-
-					pendingHtlcs[key].intervalHoldFees = 0
-				}
+			if p.resolvedCallback != nil {
+				p.resolvedCallback()
 			}
 
 		case <-ctx.Done():
@@ -324,6 +256,12 @@ func (p *process) processHtlcEvents(stream routerrpc.Router_SubscribeHtlcEventsC
 			}
 
 		case *routerrpc.HtlcEvent_ForwardFailEvent:
+			p.resolveChan <- circuitKey{
+				channel: event.IncomingChannelId,
+				htlc:    event.IncomingHtlcId,
+			}
+			
+		case *routerrpc.HtlcEvent_LinkFailEvent:
 			p.resolveChan <- circuitKey{
 				channel: event.IncomingChannelId,
 				htlc:    event.IncomingHtlcId,
@@ -416,19 +354,4 @@ func (p *process) getPubKey(channel uint64) (route.Vertex, error) {
 	p.pubkeyMap[channel] = remotePubkey
 
 	return remotePubkey, nil
-}
-
-func jsonToString(resp proto.Message) (string, error) {
-	jsonMarshaler := &jsonpb.Marshaler{
-		EmitDefaults: true,
-		OrigName:     true,
-		Indent:       "    ",
-	}
-
-	jsonStr, err := jsonMarshaler.MarshalToString(resp)
-	if err != nil {
-		return "", err
-	}
-
-	return jsonStr, nil
 }
