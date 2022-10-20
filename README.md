@@ -61,7 +61,7 @@ An example configuration can be found [here](circuitbreaker-example.yaml)
 
 ### Installation guide
 
-* [Circuit Breaker on the RaspiBolt](https://raspibolt.org/bonus/lightning/circuit-breaker.html): Manually install Circuit Breaker on any Debian-based OS.
+* [Circuit Breaker on the RaspiBolt](https://raspibolt.org/guide/bonus/lightning/circuit-breaker.html): Manually install Circuit Breaker on any Debian-based OS.
 
 ## Limitations
 * This software is alpha quality. Use at your own risk and be careful in particular on mainnet.
