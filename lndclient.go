@@ -164,3 +164,33 @@ func (l *lndclientGrpc) getNodeAlias(key route.Vertex) (string, error) {
 
 	return info.Node.Alias, nil
 }
+
+func (l *lndclientGrpc) getPendingIncomingHtlcs(ctx context.Context) (
+	map[circuitKey]struct{}, error) {
+
+	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := l.main.ListChannels(ctx, &lnrpc.ListChannelsRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	htlcs := make(map[circuitKey]struct{})
+	for _, channel := range resp.Channels {
+		for _, htlc := range channel.PendingHtlcs {
+			if !htlc.Incoming {
+				continue
+			}
+
+			key := circuitKey{
+				channel: channel.ChanId,
+				htlc:    htlc.HtlcIndex,
+			}
+
+			htlcs[key] = struct{}{}
+		}
+	}
+
+	return htlcs, nil
+}

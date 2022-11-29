@@ -30,6 +30,9 @@ type lndclient interface {
 
 	htlcInterceptor(ctx context.Context) (
 		routerrpc.Router_HtlcInterceptorClient, error)
+
+	getPendingIncomingHtlcs(ctx context.Context) (
+		map[circuitKey]struct{}, error)
 }
 
 type circuitKey struct {
@@ -151,6 +154,32 @@ func (p *process) rateLimit(peer route.Vertex, cfg *groupConfig) bool {
 func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 	pendingHtlcs := make(map[route.Vertex]*peerInfo)
 
+	// Initialize pending htlcs map with currently pending htlcs.
+	htlcs, err := p.client.getPendingIncomingHtlcs(ctx)
+	if err != nil {
+		return err
+	}
+	for h := range htlcs {
+		peer, err := p.getPubKey(h.channel)
+		if err != nil {
+			return err
+		}
+
+		pending, ok := pendingHtlcs[peer]
+		if !ok {
+			pending = &peerInfo{
+				htlcs: make(map[circuitKey]struct{}),
+			}
+			pendingHtlcs[peer] = pending
+		}
+
+		pending.htlcs[h] = struct{}{}
+
+		log.Infow("Initial pending htlc",
+			"peer", peer, "channel", h.channel, "htlc", h.htlc,
+		)
+	}
+
 	for {
 		select {
 		case interceptEvent := <-p.interceptChan:
@@ -180,7 +209,7 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				continue
 			}
 
-			// Apply max htlc limit.
+			// Retrieve list of pending htlcs for this peer.
 			pending, ok := pendingHtlcs[peer]
 			if !ok {
 				pending = &peerInfo{
@@ -189,19 +218,22 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				pendingHtlcs[peer] = pending
 			}
 
-			maxPending := peerCfg.MaxPendingHtlcs
+			// If htlc is new, check the max pending htlcs limit.
+			if _, exists := pending.htlcs[interceptEvent.circuitKey]; !exists {
+				maxPending := peerCfg.MaxPendingHtlcs
 
-			if maxPending > 0 && len(pending.htlcs) >= maxPending {
-				logger.Infow("Rejecting htlc",
-					"pending_htlcs", len(pending.htlcs),
-					"max_pending_htlcs", maxPending,
-				)
+				if maxPending > 0 && len(pending.htlcs) >= maxPending {
+					logger.Infow("Rejecting htlc",
+						"pending_htlcs", len(pending.htlcs),
+						"max_pending_htlcs", maxPending,
+					)
 
-				interceptEvent.resume <- false
-				continue
+					interceptEvent.resume <- false
+					continue
+				}
+
+				pending.htlcs[interceptEvent.circuitKey] = struct{}{}
 			}
-
-			pending.htlcs[interceptEvent.circuitKey] = struct{}{}
 
 			logger.Infow("Forwarding htlc",
 				"pending_htlcs", len(pending.htlcs),
