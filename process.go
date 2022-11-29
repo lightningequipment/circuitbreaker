@@ -48,6 +48,7 @@ type interceptEvent struct {
 
 type process struct {
 	client lndclient
+	cfg    *config
 
 	interceptChan chan interceptEvent
 	resolveChan   chan circuitKey
@@ -62,20 +63,20 @@ type process struct {
 	resolvedCallback func()
 }
 
-func newProcess() *process {
+func newProcess(client lndclient, cfg *config) *process {
 	return &process{
 		interceptChan: make(chan interceptEvent),
 		resolveChan:   make(chan circuitKey),
 		pubkeyMap:     make(map[uint64]route.Vertex),
 		aliasMap:      make(map[route.Vertex]string),
 		limiters:      make(map[route.Vertex]*rate.Limiter),
+		client:        client,
+		cfg:           cfg,
 	}
 }
 
-func (p *process) run(ctx context.Context, client lndclient, cfg *config) error {
+func (p *process) run(ctx context.Context) error {
 	log.Info("CircuitBreaker started")
-
-	p.client = client
 
 	var err error
 	p.identity, err = p.client.getIdentity()
@@ -121,7 +122,7 @@ func (p *process) run(ctx context.Context, client lndclient, cfg *config) error 
 	})
 
 	group.Go(func() error {
-		return p.eventLoop(ctx, cfg)
+		return p.eventLoop(ctx)
 	})
 
 	return group.Wait()
@@ -151,7 +152,7 @@ func (p *process) rateLimit(peer route.Vertex, cfg *groupConfig) bool {
 	return !limiter.Allow()
 }
 
-func (p *process) eventLoop(ctx context.Context, cfg *config) error {
+func (p *process) eventLoop(ctx context.Context) error {
 	pendingHtlcs := make(map[route.Vertex]*peerInfo)
 
 	// Initialize pending htlcs map with currently pending htlcs.
@@ -197,7 +198,7 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				"peer", peer.String(),
 			)
 
-			peerCfg := cfg.forPeer(peer)
+			peerCfg := p.cfg.forPeer(peer)
 
 			if p.rateLimit(peer, peerCfg) {
 				logger.Infow("Rejecting htlc because of rate limit",

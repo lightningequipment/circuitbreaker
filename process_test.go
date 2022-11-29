@@ -32,13 +32,6 @@ const (
 )
 
 func testProcess(t *testing.T, event resolveEvent) {
-	p := newProcess()
-
-	resolved := make(chan struct{})
-	p.resolvedCallback = func() {
-		close(resolved)
-	}
-
 	cfg := &config{
 		groupConfig: groupConfig{
 			MaxPendingHtlcs: 2,
@@ -49,9 +42,16 @@ func testProcess(t *testing.T, event resolveEvent) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	p := newProcess(client, cfg)
+
+	resolved := make(chan struct{})
+	p.resolvedCallback = func() {
+		close(resolved)
+	}
+
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx, client, cfg)
+		exit <- p.run(ctx)
 	}()
 
 	key := &routerrpc.CircuitKey{
@@ -93,8 +93,6 @@ func testProcess(t *testing.T, event resolveEvent) {
 func TestRateLimit(t *testing.T) {
 	defer Timeout()()
 
-	p := newProcess()
-
 	cfg := &config{
 		groupConfig: groupConfig{
 			HtlcMinInterval: time.Minute,
@@ -106,9 +104,11 @@ func TestRateLimit(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	p := newProcess(client, cfg)
+
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx, client, cfg)
+		exit <- p.run(ctx)
 	}()
 
 	key := &routerrpc.CircuitKey{

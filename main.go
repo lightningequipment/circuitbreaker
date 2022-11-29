@@ -135,8 +135,8 @@ func main() {
 		}
 		defer client.close()
 
-		p := newProcess()
-		return p.run(context.Background(), client, config)
+		p := newProcess(client, config)
+		return p.run(context.Background())
 	}
 
 	if err := app.Run(os.Args); err != nil {
