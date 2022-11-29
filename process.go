@@ -9,7 +9,6 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 )
 
 var (
@@ -57,7 +56,7 @@ type process struct {
 	pubkeyMap map[uint64]route.Vertex
 	aliasMap  map[route.Vertex]string
 
-	limiters map[route.Vertex]*rate.Limiter
+	peerCtrls map[route.Vertex]*peerController
 
 	// Testing hook
 	resolvedCallback func()
@@ -69,9 +68,9 @@ func newProcess(client lndclient, cfg *config) *process {
 		resolveChan:   make(chan circuitKey),
 		pubkeyMap:     make(map[uint64]route.Vertex),
 		aliasMap:      make(map[route.Vertex]string),
-		limiters:      make(map[route.Vertex]*rate.Limiter),
 		client:        client,
 		cfg:           cfg,
+		peerCtrls:     make(map[route.Vertex]*peerController),
 	}
 }
 
@@ -128,57 +127,63 @@ func (p *process) run(ctx context.Context) error {
 	return group.Wait()
 }
 
-type peerInfo struct {
-	htlcs map[circuitKey]struct{}
+func (p *process) getPeerController(peer route.Vertex) *peerController {
+	ctrl, ok := p.peerCtrls[peer]
+	if ok {
+		return ctrl
+	}
+
+	// If the peer does not yet exist, initialize it with no pending htlcs.
+	htlcs := make(map[circuitKey]struct{})
+
+	return p.createPeerController(peer, htlcs)
 }
 
-func (p *process) rateLimit(peer route.Vertex, cfg *groupConfig) bool {
-	// Skip if no interval set.
-	if cfg.HtlcMinInterval == 0 {
-		return false
-	}
+func (p *process) createPeerController(peer route.Vertex,
+	htlcs map[circuitKey]struct{}) *peerController {
 
-	// Get or create rate limiter with config that applies to this peer.
-	limiter, ok := p.limiters[peer]
-	if !ok {
-		limiter = rate.NewLimiter(
-			rate.Every(cfg.HtlcMinInterval),
-			cfg.HtlcBurstSize,
-		)
-		p.limiters[peer] = limiter
-	}
+	peerCfg := p.cfg.forPeer(peer)
 
-	// Apply rate limit.
-	return !limiter.Allow()
+	alias := p.getNodeAlias(peer)
+
+	logger := log.With(
+		"peer_alias", alias,
+		"peer", peer.String(),
+	)
+
+	ctrl := newPeerController(logger, peerCfg, htlcs)
+	p.peerCtrls[peer] = ctrl
+
+	return ctrl
 }
 
 func (p *process) eventLoop(ctx context.Context) error {
-	pendingHtlcs := make(map[route.Vertex]*peerInfo)
-
-	// Initialize pending htlcs map with currently pending htlcs.
-	htlcs, err := p.client.getPendingIncomingHtlcs(ctx)
+	// Retrieve all pending htlcs from lnd.
+	allHtlcs, err := p.client.getPendingIncomingHtlcs(ctx)
 	if err != nil {
 		return err
 	}
-	for h := range htlcs {
+
+	// Arrange htlcs per peer.
+	htlcsPerPeer := make(map[route.Vertex]map[circuitKey]struct{})
+	for h := range allHtlcs {
 		peer, err := p.getPubKey(h.channel)
 		if err != nil {
 			return err
 		}
 
-		pending, ok := pendingHtlcs[peer]
-		if !ok {
-			pending = &peerInfo{
-				htlcs: make(map[circuitKey]struct{}),
-			}
-			pendingHtlcs[peer] = pending
+		htlcs := htlcsPerPeer[peer]
+		if htlcs == nil {
+			htlcs = make(map[circuitKey]struct{})
+			htlcsPerPeer[peer] = htlcs
 		}
 
-		pending.htlcs[h] = struct{}{}
+		htlcs[h] = struct{}{}
+	}
 
-		log.Infow("Initial pending htlc",
-			"peer", peer, "channel", h.channel, "htlc", h.htlc,
-		)
+	// Initialize peer controllers with currently pending htlcs.
+	for peer, htlcs := range htlcsPerPeer {
+		p.createPeerController(peer, htlcs)
 	}
 
 	for {
@@ -189,64 +194,9 @@ func (p *process) eventLoop(ctx context.Context) error {
 				return err
 			}
 
-			alias := p.getNodeAlias(peer)
+			ctrl := p.getPeerController(peer)
 
-			logger := log.With(
-				"channel", interceptEvent.channel,
-				"htlc", interceptEvent.htlc,
-				"peer_alias", alias,
-				"peer", peer.String(),
-			)
-
-			peerCfg := p.cfg.forPeer(peer)
-
-			if p.rateLimit(peer, peerCfg) {
-				logger.Infow("Rejecting htlc because of rate limit",
-					"htlc_min_interval", peerCfg.HtlcMinInterval,
-					"htlc_burst_size", peerCfg.HtlcBurstSize,
-				)
-
-				if err := interceptEvent.resume(false); err != nil {
-					return err
-				}
-
-				continue
-			}
-
-			// Retrieve list of pending htlcs for this peer.
-			pending, ok := pendingHtlcs[peer]
-			if !ok {
-				pending = &peerInfo{
-					htlcs: make(map[circuitKey]struct{}),
-				}
-				pendingHtlcs[peer] = pending
-			}
-
-			// If htlc is new, check the max pending htlcs limit.
-			if _, exists := pending.htlcs[interceptEvent.circuitKey]; !exists {
-				maxPending := peerCfg.MaxPendingHtlcs
-
-				if maxPending > 0 && len(pending.htlcs) >= maxPending {
-					logger.Infow("Rejecting htlc",
-						"pending_htlcs", len(pending.htlcs),
-						"max_pending_htlcs", maxPending,
-					)
-
-					if err := interceptEvent.resume(false); err != nil {
-						return err
-					}
-
-					continue
-				}
-
-				pending.htlcs[interceptEvent.circuitKey] = struct{}{}
-			}
-
-			logger.Infow("Forwarding htlc",
-				"pending_htlcs", len(pending.htlcs),
-			)
-
-			if err := interceptEvent.resume(true); err != nil {
+			if err := ctrl.process(interceptEvent); err != nil {
 				return err
 			}
 
@@ -256,25 +206,9 @@ func (p *process) eventLoop(ctx context.Context) error {
 				return err
 			}
 
-			pending, ok := pendingHtlcs[peer]
-			if !ok {
-				continue
-			}
+			ctrl := p.getPeerController(peer)
 
-			_, ok = pending.htlcs[resolvedKey]
-			if !ok {
-				continue
-			}
-
-			delete(pending.htlcs, resolvedKey)
-
-			log.Infow("Resolving htlc",
-				"channel", resolvedKey.channel,
-				"htlc", resolvedKey.htlc,
-				"peer_alias", p.getNodeAlias(peer),
-				"peer", peer.String(),
-				"pending_htlcs", len(pending.htlcs),
-			)
+			ctrl.resolved(resolvedKey)
 
 			if p.resolvedCallback != nil {
 				p.resolvedCallback()

@@ -125,14 +125,29 @@ func TestRateLimit(t *testing.T) {
 	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
 
 	// Second htlc right after is also accepted because of burst size 2.
+	interceptReq.IncomingCircuitKey.HtlcId++
 	client.htlcInterceptorRequests <- interceptReq
 	resp = <-client.htlcInterceptorResponses
 	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
 
 	// Third htlc again right after should be rejected.
+	interceptReq.IncomingCircuitKey.HtlcId++
 	client.htlcInterceptorRequests <- interceptReq
 	resp = <-client.htlcInterceptorResponses
 	require.Equal(t, routerrpc.ResolveHoldForwardAction_FAIL, resp.Action)
+
+	htlcEvent := &routerrpc.HtlcEvent{
+		EventType:         routerrpc.HtlcEvent_FORWARD,
+		IncomingChannelId: key.ChanId,
+		IncomingHtlcId:    key.HtlcId,
+		Event:             &routerrpc.HtlcEvent_ForwardFailEvent{},
+	}
+
+	client.htlcEvents <- htlcEvent
+
+	// Allow some time for the peer controller to process the failed forward
+	// event.
+	time.Sleep(time.Second)
 
 	cancel()
 	require.ErrorIs(t, <-exit, context.Canceled)
