@@ -126,7 +126,9 @@ func (p *process) run(ctx context.Context) error {
 	return group.Wait()
 }
 
-func (p *process) getPeerController(peer route.Vertex) *peerController {
+func (p *process) getPeerController(ctx context.Context, peer route.Vertex,
+	startGo func(func() error)) *peerController {
+
 	ctrl, ok := p.peerCtrls[peer]
 	if ok {
 		return ctrl
@@ -135,11 +137,11 @@ func (p *process) getPeerController(peer route.Vertex) *peerController {
 	// If the peer does not yet exist, initialize it with no pending htlcs.
 	htlcs := make(map[circuitKey]struct{})
 
-	return p.createPeerController(peer, htlcs)
+	return p.createPeerController(ctx, peer, startGo, htlcs)
 }
 
-func (p *process) createPeerController(peer route.Vertex,
-	htlcs map[circuitKey]struct{}) *peerController {
+func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
+	startGo func(func() error), htlcs map[circuitKey]struct{}) *peerController {
 
 	peerCfg := p.cfg.forPeer(peer)
 
@@ -151,12 +153,23 @@ func (p *process) createPeerController(peer route.Vertex,
 	)
 
 	ctrl := newPeerController(logger, peerCfg, htlcs)
+
+	startGo(func() error {
+		return ctrl.run(ctx)
+	})
+
 	p.peerCtrls[peer] = ctrl
 
 	return ctrl
 }
 
 func (p *process) eventLoop(ctx context.Context) error {
+	// Create a group to attach peer goroutines to.
+	group, ctx := errgroup.WithContext(ctx)
+	defer func() {
+		_ = group.Wait()
+	}()
+
 	// Retrieve all pending htlcs from lnd.
 	allHtlcs, err := p.client.getPendingIncomingHtlcs(ctx)
 	if err != nil {
@@ -182,7 +195,7 @@ func (p *process) eventLoop(ctx context.Context) error {
 
 	// Initialize peer controllers with currently pending htlcs.
 	for peer, htlcs := range htlcsPerPeer {
-		p.createPeerController(peer, htlcs)
+		p.createPeerController(ctx, peer, group.Go, htlcs)
 	}
 
 	for {
@@ -193,9 +206,13 @@ func (p *process) eventLoop(ctx context.Context) error {
 				return err
 			}
 
-			ctrl := p.getPeerController(chanInfo.peer)
+			ctrl := p.getPeerController(ctx, chanInfo.peer, group.Go)
 
-			if err := ctrl.process(interceptEvent); err != nil {
+			peerEvent := peerInterceptEvent{
+				interceptEvent: interceptEvent,
+				peerInitiated:  !chanInfo.initiator,
+			}
+			if err := ctrl.process(ctx, peerEvent); err != nil {
 				return err
 			}
 
@@ -205,9 +222,11 @@ func (p *process) eventLoop(ctx context.Context) error {
 				return err
 			}
 
-			ctrl := p.getPeerController(chanInfo.peer)
+			ctrl := p.getPeerController(ctx, chanInfo.peer, group.Go)
 
-			ctrl.resolved(resolvedKey)
+			if err := ctrl.resolved(ctx, resolvedKey); err != nil {
+				return err
+			}
 
 			if p.resolvedCallback != nil {
 				p.resolvedCallback()

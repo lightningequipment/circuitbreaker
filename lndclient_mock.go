@@ -30,6 +30,7 @@ func (l *lndclientMock) getIdentity() (route.Vertex, error) {
 func (l *lndclientMock) listChannels() (map[uint64]*channel, error) {
 	return map[uint64]*channel{
 		2: {peer: route.Vertex{2}},
+		3: {peer: route.Vertex{3}, initiator: true},
 	}, nil
 }
 

@@ -90,13 +90,23 @@ func testProcess(t *testing.T, event resolveEvent) {
 	require.ErrorIs(t, <-exit, context.Canceled)
 }
 
-func TestRateLimit(t *testing.T) {
+func TestLimits(t *testing.T) {
+	for _, mode := range []Mode{ModeFail, ModeQueue, ModeQueuePeerInitiated} {
+		t.Run(mode.String(), func(t *testing.T) {
+			t.Run("rate limit", func(t *testing.T) { testRateLimit(t, mode) })
+			t.Run("max pending", func(t *testing.T) { testMaxPending(t, mode) })
+		})
+	}
+}
+
+func testRateLimit(t *testing.T, mode Mode) {
 	defer Timeout()()
 
 	cfg := &config{
 		groupConfig: groupConfig{
-			HtlcMinInterval: time.Minute,
+			HtlcMinInterval: 2 * time.Second,
 			HtlcBurstSize:   2,
+			Mode:            mode,
 		},
 	}
 
@@ -111,8 +121,15 @@ func TestRateLimit(t *testing.T) {
 		exit <- p.run(ctx)
 	}()
 
+	var chanId uint64 = 2
+	if mode == ModeQueuePeerInitiated {
+		// We are the initiator of the channel. Not queueing is expected in this
+		// mode.
+		chanId = 3
+	}
+
 	key := &routerrpc.CircuitKey{
-		ChanId: 2,
+		ChanId: chanId,
 		HtlcId: 5,
 	}
 	interceptReq := &routerrpc.ForwardHtlcInterceptRequest{
@@ -130,30 +147,39 @@ func TestRateLimit(t *testing.T) {
 	resp = <-client.htlcInterceptorResponses
 	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
 
-	// Third htlc again right after should be rejected.
+	// Third htlc again right after should hit the rate limit.
 	interceptReq.IncomingCircuitKey.HtlcId++
 	client.htlcInterceptorRequests <- interceptReq
+
+	interceptStart := time.Now()
+
 	resp = <-client.htlcInterceptorResponses
-	require.Equal(t, routerrpc.ResolveHoldForwardAction_FAIL, resp.Action)
 
-	htlcEvent := &routerrpc.HtlcEvent{
-		EventType:         routerrpc.HtlcEvent_FORWARD,
-		IncomingChannelId: key.ChanId,
-		IncomingHtlcId:    key.HtlcId,
-		Event:             &routerrpc.HtlcEvent_ForwardFailEvent{},
+	if mode == ModeQueue {
+		require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
+		require.GreaterOrEqual(t, time.Since(interceptStart), time.Second)
+	} else {
+		require.Equal(t, routerrpc.ResolveHoldForwardAction_FAIL, resp.Action)
+
+		htlcEvent := &routerrpc.HtlcEvent{
+			EventType:         routerrpc.HtlcEvent_FORWARD,
+			IncomingChannelId: key.ChanId,
+			IncomingHtlcId:    key.HtlcId,
+			Event:             &routerrpc.HtlcEvent_ForwardFailEvent{},
+		}
+
+		client.htlcEvents <- htlcEvent
+
+		// Allow some time for the peer controller to process the failed forward
+		// event.
+		time.Sleep(time.Second)
 	}
-
-	client.htlcEvents <- htlcEvent
-
-	// Allow some time for the peer controller to process the failed forward
-	// event.
-	time.Sleep(time.Second)
 
 	cancel()
 	require.ErrorIs(t, <-exit, context.Canceled)
 }
 
-func TestMaxPending(t *testing.T) {
+func testMaxPending(t *testing.T, mode Mode) {
 	defer Timeout()()
 
 	cfg := &config{
@@ -161,6 +187,7 @@ func TestMaxPending(t *testing.T) {
 			HtlcMinInterval: time.Minute,
 			HtlcBurstSize:   2,
 			MaxPendingHtlcs: 1,
+			Mode:            mode,
 		},
 	}
 
@@ -175,8 +202,15 @@ func TestMaxPending(t *testing.T) {
 		exit <- p.run(ctx)
 	}()
 
+	var chanId uint64 = 2
+	if mode == ModeQueuePeerInitiated {
+		// We are the initiator of the channel. Not queueing is expected in this
+		// mode.
+		chanId = 3
+	}
+
 	key := &routerrpc.CircuitKey{
-		ChanId: 2,
+		ChanId: chanId,
 		HtlcId: 5,
 	}
 	interceptReq := &routerrpc.ForwardHtlcInterceptRequest{
@@ -188,12 +222,21 @@ func TestMaxPending(t *testing.T) {
 	resp := <-client.htlcInterceptorResponses
 	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
 
-	// Second htlc should be failed because of the max pending htlcs limit.
+	// Second htlc should be hitting the max pending htlcs limit.
 	interceptReq.IncomingCircuitKey.HtlcId++
 	client.htlcInterceptorRequests <- interceptReq
 
-	resp = <-client.htlcInterceptorResponses
-	require.Equal(t, routerrpc.ResolveHoldForwardAction_FAIL, resp.Action)
+	if mode == ModeQueue {
+		select {
+		case <-client.htlcInterceptorResponses:
+			require.Fail(t, "unexpected response")
+
+		case <-time.After(time.Second):
+		}
+	} else {
+		resp = <-client.htlcInterceptorResponses
+		require.Equal(t, routerrpc.ResolveHoldForwardAction_FAIL, resp.Action)
+	}
 
 	cancel()
 	require.ErrorIs(t, <-exit, context.Canceled)
