@@ -87,7 +87,7 @@ func testProcess(t *testing.T, event resolveEvent) {
 	<-resolved
 
 	cancel()
-	require.NoError(t, <-exit)
+	require.ErrorIs(t, <-exit, context.Canceled)
 }
 
 func TestRateLimit(t *testing.T) {
@@ -135,5 +135,5 @@ func TestRateLimit(t *testing.T) {
 	require.Equal(t, routerrpc.ResolveHoldForwardAction_FAIL, resp.Action)
 
 	cancel()
-	require.NoError(t, <-exit)
+	require.ErrorIs(t, <-exit, context.Canceled)
 }

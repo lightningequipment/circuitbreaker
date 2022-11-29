@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
@@ -81,37 +83,45 @@ func (p *process) run(ctx context.Context, client lndclient, cfg *config) error 
 	log.Infow("Connected to lnd node",
 		"pubkey", p.identity.String())
 
+	group, ctx := errgroup.WithContext(ctx)
+
 	stream, err := p.client.subscribeHtlcEvents(
-		ctxb, &routerrpc.SubscribeHtlcEventsRequest{},
+		ctx, &routerrpc.SubscribeHtlcEventsRequest{},
 	)
 	if err != nil {
 		return err
 	}
 
-	interceptor, err := p.client.htlcInterceptor(ctxb)
+	interceptor, err := p.client.htlcInterceptor(ctx)
 	if err != nil {
 		return err
 	}
 
 	log.Info("Interceptor/notification handlers registered")
 
-	go func() {
-		err := p.processHtlcEvents(stream)
+	group.Go(func() error {
+		err := p.processHtlcEvents(ctx, stream)
 		if err != nil {
-			log.Errorw("htlc events error",
-				"err", err)
+			return fmt.Errorf("htlc events error: %w", err)
 		}
-	}()
 
-	go func() {
-		err := p.processInterceptor(interceptor)
+		return nil
+	})
+
+	group.Go(func() error {
+		err := p.processInterceptor(ctx, interceptor)
 		if err != nil {
-			log.Errorw("interceptor error",
-				"err", err)
+			return fmt.Errorf("interceptor error: %w", err)
 		}
-	}()
 
-	return p.eventLoop(ctx, cfg)
+		return err
+	})
+
+	group.Go(func() error {
+		return p.eventLoop(ctx, cfg)
+	})
+
+	return group.Wait()
 }
 
 type peerInfo struct {
@@ -230,14 +240,14 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 			}
 
 		case <-ctx.Done():
-			log.Info("Exit")
-
-			return nil
+			return ctx.Err()
 		}
 	}
 }
 
-func (p *process) processHtlcEvents(stream routerrpc.Router_SubscribeHtlcEventsClient) error {
+func (p *process) processHtlcEvents(ctx context.Context,
+	stream routerrpc.Router_SubscribeHtlcEventsClient) error {
+
 	for {
 		event, err := stream.Recv()
 		if err != nil {
@@ -250,27 +260,28 @@ func (p *process) processHtlcEvents(stream routerrpc.Router_SubscribeHtlcEventsC
 
 		switch event.Event.(type) {
 		case *routerrpc.HtlcEvent_SettleEvent:
-			p.resolveChan <- circuitKey{
-				channel: event.IncomingChannelId,
-				htlc:    event.IncomingHtlcId,
-			}
-
 		case *routerrpc.HtlcEvent_ForwardFailEvent:
-			p.resolveChan <- circuitKey{
-				channel: event.IncomingChannelId,
-				htlc:    event.IncomingHtlcId,
-			}
-			
 		case *routerrpc.HtlcEvent_LinkFailEvent:
-			p.resolveChan <- circuitKey{
-				channel: event.IncomingChannelId,
-				htlc:    event.IncomingHtlcId,
-			}
+
+		default:
+			continue
+		}
+
+		select {
+		case p.resolveChan <- circuitKey{
+			channel: event.IncomingChannelId,
+			htlc:    event.IncomingHtlcId,
+		}:
+
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 }
 
-func (p *process) processInterceptor(interceptor routerrpc.Router_HtlcInterceptorClient) error {
+func (p *process) processInterceptor(ctx context.Context,
+	interceptor routerrpc.Router_HtlcInterceptorClient) error {
+
 	for {
 		event, err := interceptor.Recv()
 		if err != nil {
@@ -279,13 +290,18 @@ func (p *process) processInterceptor(interceptor routerrpc.Router_HtlcIntercepto
 
 		resumeChan := make(chan bool)
 
-		p.interceptChan <- interceptEvent{
+		select {
+		case p.interceptChan <- interceptEvent{
 			circuitKey: circuitKey{
 				channel: event.IncomingCircuitKey.ChanId,
 				htlc:    event.IncomingCircuitKey.HtlcId,
 			},
 			valueMsat: int64(event.OutgoingAmountMsat),
 			resume:    resumeChan,
+		}:
+
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 
 		resume, ok := <-resumeChan
