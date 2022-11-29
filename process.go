@@ -43,7 +43,7 @@ type circuitKey struct {
 type interceptEvent struct {
 	circuitKey
 	valueMsat int64
-	resume    chan bool
+	resume    func(bool) error
 }
 
 type process struct {
@@ -205,7 +205,10 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 					"htlc_burst_size", peerCfg.HtlcBurstSize,
 				)
 
-				interceptEvent.resume <- false
+				if err := interceptEvent.resume(false); err != nil {
+					return err
+				}
+
 				continue
 			}
 
@@ -228,7 +231,10 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 						"max_pending_htlcs", maxPending,
 					)
 
-					interceptEvent.resume <- false
+					if err := interceptEvent.resume(false); err != nil {
+						return err
+					}
+
 					continue
 				}
 
@@ -239,7 +245,9 @@ func (p *process) eventLoop(ctx context.Context, cfg *config) error {
 				"pending_htlcs", len(pending.htlcs),
 			)
 
-			interceptEvent.resume <- true
+			if err := interceptEvent.resume(true); err != nil {
+				return err
+			}
 
 		case resolvedKey := <-p.resolveChan:
 			peer, err := p.getPubKey(resolvedKey.channel)
@@ -320,39 +328,36 @@ func (p *process) processInterceptor(ctx context.Context,
 			return err
 		}
 
-		resumeChan := make(chan bool)
+		key := circuitKey{
+			channel: event.IncomingCircuitKey.ChanId,
+			htlc:    event.IncomingCircuitKey.HtlcId,
+		}
+
+		resume := func(resume bool) error {
+			response := &routerrpc.ForwardHtlcInterceptResponse{
+				IncomingCircuitKey: &routerrpc.CircuitKey{
+					ChanId: key.channel,
+					HtlcId: key.htlc,
+				},
+			}
+			if resume {
+				response.Action = routerrpc.ResolveHoldForwardAction_RESUME
+			} else {
+				response.Action = routerrpc.ResolveHoldForwardAction_FAIL
+			}
+
+			return interceptor.Send(response)
+		}
 
 		select {
 		case p.interceptChan <- interceptEvent{
-			circuitKey: circuitKey{
-				channel: event.IncomingCircuitKey.ChanId,
-				htlc:    event.IncomingCircuitKey.HtlcId,
-			},
-			valueMsat: int64(event.OutgoingAmountMsat),
-			resume:    resumeChan,
+			circuitKey: key,
+			valueMsat:  int64(event.OutgoingAmountMsat),
+			resume:     resume,
 		}:
 
 		case <-ctx.Done():
 			return ctx.Err()
-		}
-
-		resume, ok := <-resumeChan
-		if !ok {
-			return errors.New("resume channel closed")
-		}
-
-		response := &routerrpc.ForwardHtlcInterceptResponse{
-			IncomingCircuitKey: event.IncomingCircuitKey,
-		}
-		if resume {
-			response.Action = routerrpc.ResolveHoldForwardAction_RESUME
-		} else {
-			response.Action = routerrpc.ResolveHoldForwardAction_FAIL
-		}
-
-		err = interceptor.Send(response)
-		if err != nil {
-			return err
 		}
 	}
 }
