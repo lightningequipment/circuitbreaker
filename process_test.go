@@ -32,13 +32,6 @@ const (
 )
 
 func testProcess(t *testing.T, event resolveEvent) {
-	p := newProcess()
-
-	resolved := make(chan struct{})
-	p.resolvedCallback = func() {
-		close(resolved)
-	}
-
 	cfg := &config{
 		groupConfig: groupConfig{
 			MaxPendingHtlcs: 2,
@@ -49,9 +42,16 @@ func testProcess(t *testing.T, event resolveEvent) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	p := newProcess(client, cfg)
+
+	resolved := make(chan struct{})
+	p.resolvedCallback = func() {
+		close(resolved)
+	}
+
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx, client, cfg)
+		exit <- p.run(ctx)
 	}()
 
 	key := &routerrpc.CircuitKey{
@@ -87,13 +87,11 @@ func testProcess(t *testing.T, event resolveEvent) {
 	<-resolved
 
 	cancel()
-	require.NoError(t, <-exit)
+	require.ErrorIs(t, <-exit, context.Canceled)
 }
 
 func TestRateLimit(t *testing.T) {
 	defer Timeout()()
-
-	p := newProcess()
 
 	cfg := &config{
 		groupConfig: groupConfig{
@@ -106,9 +104,11 @@ func TestRateLimit(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	p := newProcess(client, cfg)
+
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx, client, cfg)
+		exit <- p.run(ctx)
 	}()
 
 	key := &routerrpc.CircuitKey{
@@ -125,15 +125,30 @@ func TestRateLimit(t *testing.T) {
 	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
 
 	// Second htlc right after is also accepted because of burst size 2.
+	interceptReq.IncomingCircuitKey.HtlcId++
 	client.htlcInterceptorRequests <- interceptReq
 	resp = <-client.htlcInterceptorResponses
 	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
 
 	// Third htlc again right after should be rejected.
+	interceptReq.IncomingCircuitKey.HtlcId++
 	client.htlcInterceptorRequests <- interceptReq
 	resp = <-client.htlcInterceptorResponses
 	require.Equal(t, routerrpc.ResolveHoldForwardAction_FAIL, resp.Action)
 
+	htlcEvent := &routerrpc.HtlcEvent{
+		EventType:         routerrpc.HtlcEvent_FORWARD,
+		IncomingChannelId: key.ChanId,
+		IncomingHtlcId:    key.HtlcId,
+		Event:             &routerrpc.HtlcEvent_ForwardFailEvent{},
+	}
+
+	client.htlcEvents <- htlcEvent
+
+	// Allow some time for the peer controller to process the failed forward
+	// event.
+	time.Sleep(time.Second)
+
 	cancel()
-	require.NoError(t, <-exit)
+	require.ErrorIs(t, <-exit, context.Canceled)
 }
