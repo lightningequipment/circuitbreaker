@@ -14,6 +14,7 @@ type peerController struct {
 
 func newPeerController(logger *zap.SugaredLogger, cfg *groupConfig,
 	htlcs map[circuitKey]struct{}) *peerController {
+
 	var limiter *rate.Limiter
 
 	// Skip if no interval set.

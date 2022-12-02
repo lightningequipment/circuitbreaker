@@ -67,7 +67,7 @@ func (l *lndclientMock) getPendingIncomingHtlcs(ctx context.Context) (
 }
 
 type htlcEventsMock struct {
-	ctx context.Context
+	ctx context.Context //nolint:containedctx
 	routerrpc.Router_SubscribeHtlcEventsClient
 
 	htlcEvents chan *routerrpc.HtlcEvent
@@ -84,7 +84,7 @@ func (h *htlcEventsMock) Recv() (*routerrpc.HtlcEvent, error) {
 }
 
 type htlcInterceptorMock struct {
-	ctx context.Context
+	ctx context.Context //nolint:containedctx
 	routerrpc.Router_HtlcInterceptorClient
 
 	htlcInterceptorRequests  chan *routerrpc.ForwardHtlcInterceptRequest

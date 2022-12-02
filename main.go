@@ -11,7 +11,6 @@ import (
 	"github.com/btcsuite/btcutil"
 	"github.com/lightningnetwork/lnd/build"
 	"github.com/urfave/cli"
-
 	"google.golang.org/grpc"
 )
 
@@ -136,6 +135,7 @@ func main() {
 		defer client.close()
 
 		p := newProcess(client, config)
+
 		return p.run(context.Background())
 	}
 
