@@ -58,6 +58,7 @@ func newConfigLoader(path string) *configLoader {
 	loader := &configLoader{
 		path: path,
 	}
+
 	return loader
 }
 
