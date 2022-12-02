@@ -13,6 +13,13 @@ htlcMinInterval: 1s
 # https://en.wikipedia.org/wiki/Token_bucket.
 htlcBurstSize: 10
 
+# Default mode setting for peers. If set to 'queue', htlcs that exceed limits
+# are queued and forwarded later. If set to `queue_peer_initiated`, only htlcs
+# on channels that we didn't initiate are queued. On other channels, htlcs are
+# failed. If set to 'fail', all htlcs exceeding limits are failed back
+# instantly. If not set, mode defaults to 'fail'.
+mode: queue_peer_initiated
+
 # Define exception groups. Note that the configuration of the exception group
 # does not inherit from the defaults above. So for example not setting a rate
 # limit really means no rate limit, even if there is a default configured.

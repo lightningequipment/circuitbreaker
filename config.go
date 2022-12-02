@@ -13,6 +13,7 @@ type yamlGroupConfig struct {
 	MaxPendingHtlcs int           `yaml:"maxPendingHtlcs"`
 	HtlcMinInterval time.Duration `yaml:"htlcMinInterval"`
 	HtlcBurstSize   int           `yaml:"htlcBurstSize"`
+	Mode            string        `yaml:"mode"`
 }
 
 type yamlGroup struct {
@@ -27,11 +28,37 @@ type yamlConfig struct {
 	Groups []yamlGroup `yaml:"groups"`
 }
 
+type Mode int
+
+const (
+	ModeFail Mode = iota
+	ModeQueue
+	ModeQueuePeerInitiated
+)
+
+func (m Mode) String() string {
+	switch m {
+	case ModeFail:
+		return "fail"
+
+	case ModeQueue:
+		return "queue"
+
+	case ModeQueuePeerInitiated:
+		return "queue_peer_initiated"
+
+	default:
+		panic("unknown mode")
+	}
+}
+
 type groupConfig struct {
 	MaxPendingHtlcs int
 
 	HtlcMinInterval time.Duration
 	HtlcBurstSize   int
+
+	Mode Mode
 }
 
 type config struct {
@@ -77,21 +104,42 @@ func (c *configLoader) load() (*config, error) {
 		return nil, err
 	}
 
-	parseGroupConfig := func(cfg *yamlGroupConfig) groupConfig {
+	parseGroupConfig := func(cfg *yamlGroupConfig) (groupConfig, error) {
 		burstSize := cfg.HtlcBurstSize
 		if burstSize == 0 {
 			burstSize = 1
+		}
+
+		var mode Mode
+		switch cfg.Mode {
+		case "", "fail":
+			mode = ModeFail
+
+		case "queue":
+			mode = ModeQueue
+
+		case "queue_peer_initiated":
+			mode = ModeQueuePeerInitiated
+
+		default:
+			return groupConfig{}, fmt.Errorf("unknown mode %v", cfg.Mode)
 		}
 
 		return groupConfig{
 			MaxPendingHtlcs: cfg.MaxPendingHtlcs,
 			HtlcMinInterval: cfg.HtlcMinInterval,
 			HtlcBurstSize:   burstSize,
-		}
+			Mode:            mode,
+		}, nil
+	}
+
+	defaultCfg, err := parseGroupConfig(&yamlCfg.yamlGroupConfig)
+	if err != nil {
+		return nil, err
 	}
 
 	config := config{
-		groupConfig: parseGroupConfig(&yamlCfg.yamlGroupConfig),
+		groupConfig: defaultCfg,
 		PerPeer:     make(map[route.Vertex]groupConfig),
 	}
 
@@ -108,9 +156,12 @@ func (c *configLoader) load() (*config, error) {
 					peerPubkey)
 			}
 
-			config.PerPeer[peerPubkey] = parseGroupConfig(
-				&group.yamlGroupConfig,
-			)
+			peerCfg, err := parseGroupConfig(&group.yamlGroupConfig)
+			if err != nil {
+				return nil, err
+			}
+
+			config.PerPeer[peerPubkey] = peerCfg
 		}
 	}
 

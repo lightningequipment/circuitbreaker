@@ -27,10 +27,10 @@ func (l *lndclientMock) getIdentity() (route.Vertex, error) {
 	return mockIdentity, nil
 }
 
-func (l *lndclientMock) getChanInfo(channel uint64) (*channelEdge, error) {
-	return &channelEdge{
-		node1Pub: mockIdentity,
-		node2Pub: route.Vertex{byte(channel & 0xff)},
+func (l *lndclientMock) listChannels() (map[uint64]*channel, error) {
+	return map[uint64]*channel{
+		2: {peer: route.Vertex{2}},
+		3: {peer: route.Vertex{3}, initiator: true},
 	}, nil
 }
 
