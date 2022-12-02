@@ -152,3 +152,49 @@ func TestRateLimit(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, <-exit, context.Canceled)
 }
+
+func TestMaxPending(t *testing.T) {
+	defer Timeout()()
+
+	cfg := &config{
+		groupConfig: groupConfig{
+			HtlcMinInterval: time.Minute,
+			HtlcBurstSize:   2,
+			MaxPendingHtlcs: 1,
+		},
+	}
+
+	client := newLndclientMock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	p := newProcess(client, cfg)
+
+	exit := make(chan error)
+	go func() {
+		exit <- p.run(ctx)
+	}()
+
+	key := &routerrpc.CircuitKey{
+		ChanId: 2,
+		HtlcId: 5,
+	}
+	interceptReq := &routerrpc.ForwardHtlcInterceptRequest{
+		IncomingCircuitKey: key,
+	}
+
+	// First htlc accepted.
+	client.htlcInterceptorRequests <- interceptReq
+	resp := <-client.htlcInterceptorResponses
+	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
+
+	// Second htlc should be failed because of the max pending htlcs limit.
+	interceptReq.IncomingCircuitKey.HtlcId++
+	client.htlcInterceptorRequests <- interceptReq
+
+	resp = <-client.htlcInterceptorResponses
+	require.Equal(t, routerrpc.ResolveHoldForwardAction_FAIL, resp.Action)
+
+	cancel()
+	require.ErrorIs(t, <-exit, context.Canceled)
+}
