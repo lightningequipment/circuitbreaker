@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/lightningnetwork/lnd/lncfg"
 	"github.com/lightningnetwork/lnd/lnrpc"
@@ -44,7 +44,7 @@ func newLndClient(ctx *cli.Context) (*lndclientGrpc, error) {
 	}
 
 	// Load the specified macaroon file.
-	macBytes, err := ioutil.ReadFile(macPath)
+	macBytes, err := os.ReadFile(macPath)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read macaroon path (check "+
 			"the network setting!): %v", err)

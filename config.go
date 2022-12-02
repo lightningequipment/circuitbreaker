@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -67,7 +66,7 @@ func (c *configLoader) load() (*config, error) {
 		return nil, fmt.Errorf("no config file at %v", c.path)
 	}
 
-	yamlFile, err := ioutil.ReadFile(c.path)
+	yamlFile, err := os.ReadFile(c.path)
 	if err != nil {
 		return nil, err
 	}
