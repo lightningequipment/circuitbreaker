@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -19,7 +18,7 @@ var (
 type lndclient interface {
 	getIdentity() (route.Vertex, error)
 
-	getChanInfo(channel uint64) (*channelEdge, error)
+	listChannels() (map[uint64]*channel, error)
 
 	getNodeAlias(key route.Vertex) (string, error)
 
@@ -52,9 +51,9 @@ type process struct {
 	interceptChan chan interceptEvent
 	resolveChan   chan circuitKey
 
-	identity  route.Vertex
-	pubkeyMap map[uint64]route.Vertex
-	aliasMap  map[route.Vertex]string
+	identity route.Vertex
+	chanMap  map[uint64]*channel
+	aliasMap map[route.Vertex]string
 
 	peerCtrls map[route.Vertex]*peerController
 
@@ -66,7 +65,7 @@ func newProcess(client lndclient, cfg *config) *process {
 	return &process{
 		interceptChan: make(chan interceptEvent),
 		resolveChan:   make(chan circuitKey),
-		pubkeyMap:     make(map[uint64]route.Vertex),
+		chanMap:       make(map[uint64]*channel),
 		aliasMap:      make(map[route.Vertex]string),
 		client:        client,
 		cfg:           cfg,
@@ -167,15 +166,15 @@ func (p *process) eventLoop(ctx context.Context) error {
 	// Arrange htlcs per peer.
 	htlcsPerPeer := make(map[route.Vertex]map[circuitKey]struct{})
 	for h := range allHtlcs {
-		peer, err := p.getPubKey(h.channel)
+		peer, err := p.getChanInfo(h.channel)
 		if err != nil {
 			return err
 		}
 
-		htlcs := htlcsPerPeer[peer]
+		htlcs := htlcsPerPeer[peer.peer]
 		if htlcs == nil {
 			htlcs = make(map[circuitKey]struct{})
-			htlcsPerPeer[peer] = htlcs
+			htlcsPerPeer[peer.peer] = htlcs
 		}
 
 		htlcs[h] = struct{}{}
@@ -189,24 +188,24 @@ func (p *process) eventLoop(ctx context.Context) error {
 	for {
 		select {
 		case interceptEvent := <-p.interceptChan:
-			peer, err := p.getPubKey(interceptEvent.channel)
+			chanInfo, err := p.getChanInfo(interceptEvent.channel)
 			if err != nil {
 				return err
 			}
 
-			ctrl := p.getPeerController(peer)
+			ctrl := p.getPeerController(chanInfo.peer)
 
 			if err := ctrl.process(interceptEvent); err != nil {
 				return err
 			}
 
 		case resolvedKey := <-p.resolveChan:
-			peer, err := p.getPubKey(resolvedKey.channel)
+			chanInfo, err := p.getChanInfo(resolvedKey.channel)
 			if err != nil {
 				return err
 			}
 
-			ctrl := p.getPeerController(peer)
+			ctrl := p.getPeerController(chanInfo.peer)
 
 			ctrl.resolved(resolvedKey)
 
@@ -316,30 +315,29 @@ func (p *process) getNodeAlias(key route.Vertex) string {
 	return alias
 }
 
-func (p *process) getPubKey(channel uint64) (route.Vertex, error) {
-	pubkey, ok := p.pubkeyMap[channel]
+func (p *process) getChanInfo(channel uint64) (*channel, error) {
+	// Try to look up from the cache.
+	ch, ok := p.chanMap[channel]
 	if ok {
-		return pubkey, nil
+		return ch, nil
 	}
 
-	edge, err := p.client.getChanInfo(channel)
+	// Cache miss. Retrieve all channels and update the cache.
+	channels, err := p.client.listChannels()
 	if err != nil {
-		return route.Vertex{}, err
+		return nil, err
 	}
 
-	var remotePubkey route.Vertex
-	switch {
-	case edge.node1Pub == p.identity:
-		remotePubkey = edge.node2Pub
-
-	case edge.node2Pub == p.identity:
-		remotePubkey = edge.node1Pub
-
-	default:
-		return route.Vertex{}, errors.New("identity not found in chan info")
+	for chanId, ch := range channels {
+		p.chanMap[chanId] = ch
 	}
 
-	p.pubkeyMap[channel] = remotePubkey
+	// Try looking up the channel again.
+	ch, ok = p.chanMap[channel]
+	if ok {
+		return ch, nil
+	}
 
-	return remotePubkey, nil
+	// Channel not found.
+	return nil, fmt.Errorf("incoming channel %v not found", channel)
 }

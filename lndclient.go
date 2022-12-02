@@ -93,38 +93,34 @@ func (l *lndclientGrpc) getIdentity() (route.Vertex, error) {
 	return route.NewVertexFromStr(info.IdentityPubkey)
 }
 
-type channelEdge struct {
-	node1Pub, node2Pub route.Vertex
+type channel struct {
+	peer route.Vertex
 }
 
-func (l *lndclientGrpc) getChanInfo(channel uint64) (*channelEdge, error) {
+func (l *lndclientGrpc) listChannels() (map[uint64]*channel, error) {
 	ctx, cancel := context.WithTimeout(ctxb, rpcTimeout)
 	defer cancel()
 
-	log.Debugw("Retrieving channel info",
-		"channel", channel)
+	log.Debugw("Retrieving channels")
 
-	info, err := l.main.GetChanInfo(ctx, &lnrpc.ChanInfoRequest{
-		ChanId: channel,
-	})
+	resp, err := l.main.ListChannels(ctx, &lnrpc.ListChannelsRequest{})
 	if err != nil {
 		return nil, err
 	}
 
-	node1Pub, err := route.NewVertexFromStr(info.Node1Pub)
-	if err != nil {
-		return nil, err
+	chans := make(map[uint64]*channel)
+	for _, rpcChan := range resp.Channels {
+		peer, err := route.NewVertexFromStr(rpcChan.RemotePubkey)
+		if err != nil {
+			return nil, err
+		}
+
+		chans[rpcChan.ChanId] = &channel{
+			peer: peer,
+		}
 	}
 
-	node2Pub, err := route.NewVertexFromStr(info.Node2Pub)
-	if err != nil {
-		return nil, err
-	}
-
-	return &channelEdge{
-		node1Pub: node1Pub,
-		node2Pub: node2Pub,
-	}, nil
+	return chans, nil
 }
 
 func (l *lndclientGrpc) subscribeHtlcEvents(ctx context.Context,
