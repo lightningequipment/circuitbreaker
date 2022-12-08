@@ -85,5 +85,3 @@ configured globally and per peer in the configuration file.
 * The interfaces on `lnd` aren't optimized for this purpose. Therefore the use
   of a combination of different endpoints is required. This may lead to certain
   corner cases.
-* `circuitbreaker` is currently unaware of htlcs that are already in flight when
-  it is started.
