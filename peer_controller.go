@@ -45,7 +45,7 @@ func newPeerController(logger *zap.SugaredLogger, cfg *groupConfig,
 
 	// Log initial pending htlcs.
 	for h := range htlcs {
-		logger.Infow("Initial pending htlc", h.channel, "htlc", h.htlc)
+		logger.Infow("Initial pending htlc", "channel", h.channel, "htlc", h.htlc)
 	}
 
 	return &peerController{
