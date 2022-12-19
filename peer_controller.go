@@ -1,4 +1,4 @@
-package main
+package circuitbreaker
 
 import (
 	"container/list"
@@ -10,7 +10,7 @@ import (
 )
 
 type peerController struct {
-	cfg           *groupConfig
+	cfg           *GroupConfig
 	limiter       *rate.Limiter
 	logger        *zap.SugaredLogger
 	interceptChan chan peerInterceptEvent
@@ -25,7 +25,7 @@ type peerInterceptEvent struct {
 	peerInitiated bool
 }
 
-func newPeerController(logger *zap.SugaredLogger, cfg *groupConfig,
+func newPeerController(logger *zap.SugaredLogger, cfg *GroupConfig,
 	htlcs map[circuitKey]struct{}) *peerController {
 
 	var limiter *rate.Limiter

@@ -1,4 +1,4 @@
-package main
+package circuitbreaker
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -46,7 +47,8 @@ type interceptEvent struct {
 
 type process struct {
 	client lndclient
-	cfg    *config
+	cfg    *Config
+	log    *zap.SugaredLogger
 
 	interceptChan chan interceptEvent
 	resolveChan   chan circuitKey
@@ -61,8 +63,11 @@ type process struct {
 	resolvedCallback func()
 }
 
-func newProcess(client lndclient, cfg *config) *process {
+func NewProcess(client lndclient, log *zap.SugaredLogger,
+	cfg *Config) *process {
+
 	return &process{
+		log:           log,
 		interceptChan: make(chan interceptEvent),
 		resolveChan:   make(chan circuitKey),
 		chanMap:       make(map[uint64]*channel),
@@ -73,8 +78,8 @@ func newProcess(client lndclient, cfg *config) *process {
 	}
 }
 
-func (p *process) run(ctx context.Context) error {
-	log.Info("CircuitBreaker started")
+func (p *process) Run(ctx context.Context) error {
+	p.log.Info("CircuitBreaker started")
 
 	var err error
 	p.identity, err = p.client.getIdentity()
@@ -82,7 +87,7 @@ func (p *process) run(ctx context.Context) error {
 		return err
 	}
 
-	log.Infow("Connected to lnd node",
+	p.log.Infow("Connected to lnd node",
 		"pubkey", p.identity.String())
 
 	group, ctx := errgroup.WithContext(ctx)
@@ -99,7 +104,7 @@ func (p *process) run(ctx context.Context) error {
 		return err
 	}
 
-	log.Info("Interceptor/notification handlers registered")
+	p.log.Info("Interceptor/notification handlers registered")
 
 	group.Go(func() error {
 		err := p.processHtlcEvents(ctx, stream)
@@ -147,7 +152,7 @@ func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 
 	alias := p.getNodeAlias(peer)
 
-	logger := log.With(
+	logger := p.log.With(
 		"peer_alias", alias,
 		"peer", peer.String(),
 	)
@@ -323,7 +328,7 @@ func (p *process) getNodeAlias(key route.Vertex) string {
 
 	alias, err := p.client.getNodeAlias(key)
 	if err != nil {
-		log.Warnw("cannot get node alias",
+		p.log.Warnw("cannot get node alias",
 			"err", err)
 
 		return ""

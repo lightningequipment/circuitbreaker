@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/user"
@@ -11,7 +10,6 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/lightningnetwork/lnd/build"
 	"github.com/urfave/cli"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -19,8 +17,6 @@ const (
 	defaultChainSubDir      = "chain"
 	defaultTLSCertFilename  = "tls.cert"
 	defaultMacaroonFilename = "admin.macaroon"
-	defaultRPCPort          = "10009"
-	defaultRPCHostPort      = "localhost:" + defaultRPCPort
 
 	chain  = "bitcoin"
 	confFn = "circuitbreaker.yaml"
@@ -30,9 +26,8 @@ var (
 	defaultLndDir      = btcutil.AppDataDir("lnd", false)
 	defaultTLSCertPath = filepath.Join(defaultLndDir, defaultTLSCertFilename)
 
-	// maxMsgRecvSize is the largest message our client will receive. We
-	// set this to 200MiB atm.
-	maxMsgRecvSize = grpc.MaxCallRecvMsgSize(1 * 1024 * 1024 * 200)
+	defaultRPCPort     = "10009"
+	defaultRPCHostPort = "localhost:" + defaultRPCPort
 )
 
 // extractPathArgs parses the TLS certificate and macaroon paths from the
@@ -119,25 +114,7 @@ func main() {
 		},
 	}
 
-	app.Action = func(c *cli.Context) error {
-		configPath := filepath.Join(c.String("configdir"), confFn)
-		loader := newConfigLoader(configPath)
-
-		config, err := loader.load()
-		if err != nil {
-			return err
-		}
-
-		client, err := newLndClient(c)
-		if err != nil {
-			return err
-		}
-		defer client.close()
-
-		p := newProcess(client, config)
-
-		return p.run(context.Background())
-	}
+	app.Action = run
 
 	if err := app.Run(os.Args); err != nil {
 		log.Errorw("Unexpected exit", "err", err)

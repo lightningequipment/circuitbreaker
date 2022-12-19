@@ -1,4 +1,4 @@
-package main
+package circuitbreaker
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestProcess(t *testing.T) {
@@ -32,8 +33,8 @@ const (
 )
 
 func testProcess(t *testing.T, event resolveEvent) {
-	cfg := &config{
-		groupConfig: groupConfig{
+	cfg := &Config{
+		GroupConfig: GroupConfig{
 			MaxPendingHtlcs: 2,
 		},
 	}
@@ -42,7 +43,10 @@ func testProcess(t *testing.T, event resolveEvent) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	p := newProcess(client, cfg)
+	log, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	p := NewProcess(client, log.Sugar(), cfg)
 
 	resolved := make(chan struct{})
 	p.resolvedCallback = func() {
@@ -51,7 +55,7 @@ func testProcess(t *testing.T, event resolveEvent) {
 
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx)
+		exit <- p.Run(ctx)
 	}()
 
 	key := &routerrpc.CircuitKey{
@@ -102,8 +106,8 @@ func TestLimits(t *testing.T) {
 func testRateLimit(t *testing.T, mode Mode) {
 	defer Timeout()()
 
-	cfg := &config{
-		groupConfig: groupConfig{
+	cfg := &Config{
+		GroupConfig: GroupConfig{
 			HtlcMinInterval: 2 * time.Second,
 			HtlcBurstSize:   2,
 			Mode:            mode,
@@ -114,11 +118,14 @@ func testRateLimit(t *testing.T, mode Mode) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	p := newProcess(client, cfg)
+	log, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	p := NewProcess(client, log.Sugar(), cfg)
 
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx)
+		exit <- p.Run(ctx)
 	}()
 
 	var chanId uint64 = 2
@@ -182,8 +189,8 @@ func testRateLimit(t *testing.T, mode Mode) {
 func testMaxPending(t *testing.T, mode Mode) {
 	defer Timeout()()
 
-	cfg := &config{
-		groupConfig: groupConfig{
+	cfg := &Config{
+		GroupConfig: GroupConfig{
 			HtlcMinInterval: time.Minute,
 			HtlcBurstSize:   2,
 			MaxPendingHtlcs: 1,
@@ -195,11 +202,14 @@ func testMaxPending(t *testing.T, mode Mode) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	p := newProcess(client, cfg)
+	log, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	p := NewProcess(client, log.Sugar(), cfg)
 
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx)
+		exit <- p.Run(ctx)
 	}()
 
 	var chanId uint64 = 2
