@@ -19,6 +19,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ServiceClient interface {
 	GetInfo(ctx context.Context, in *GetInfoRequest, opts ...grpc.CallOption) (*GetInfoResponse, error)
+	UpdateLimit(ctx context.Context, in *UpdateLimitRequest, opts ...grpc.CallOption) (*UpdateLimitResponse, error)
 }
 
 type serviceClient struct {
@@ -38,11 +39,21 @@ func (c *serviceClient) GetInfo(ctx context.Context, in *GetInfoRequest, opts ..
 	return out, nil
 }
 
+func (c *serviceClient) UpdateLimit(ctx context.Context, in *UpdateLimitRequest, opts ...grpc.CallOption) (*UpdateLimitResponse, error) {
+	out := new(UpdateLimitResponse)
+	err := c.cc.Invoke(ctx, "/circuitbreaker.Service/UpdateLimit", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ServiceServer is the server API for Service service.
 // All implementations must embed UnimplementedServiceServer
 // for forward compatibility
 type ServiceServer interface {
 	GetInfo(context.Context, *GetInfoRequest) (*GetInfoResponse, error)
+	UpdateLimit(context.Context, *UpdateLimitRequest) (*UpdateLimitResponse, error)
 	mustEmbedUnimplementedServiceServer()
 }
 
@@ -52,6 +63,9 @@ type UnimplementedServiceServer struct {
 
 func (UnimplementedServiceServer) GetInfo(context.Context, *GetInfoRequest) (*GetInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetInfo not implemented")
+}
+func (UnimplementedServiceServer) UpdateLimit(context.Context, *UpdateLimitRequest) (*UpdateLimitResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateLimit not implemented")
 }
 func (UnimplementedServiceServer) mustEmbedUnimplementedServiceServer() {}
 
@@ -84,6 +98,24 @@ func _Service_GetInfo_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Service_UpdateLimit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateLimitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ServiceServer).UpdateLimit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/circuitbreaker.Service/UpdateLimit",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ServiceServer).UpdateLimit(ctx, req.(*UpdateLimitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Service_ServiceDesc is the grpc.ServiceDesc for Service service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -94,6 +126,10 @@ var Service_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetInfo",
 			Handler:    _Service_GetInfo_Handler,
+		},
+		{
+			MethodName: "UpdateLimit",
+			Handler:    _Service_UpdateLimit_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

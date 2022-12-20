@@ -162,3 +162,145 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = GetInfoResponseValidationError{}
+
+// Validate checks the field values on UpdateLimitRequest with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *UpdateLimitRequest) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	// no validation rules for Node
+
+	// no validation rules for MinIntervalMs
+
+	// no validation rules for BurstSize
+
+	// no validation rules for MaxPending
+
+	return nil
+}
+
+// UpdateLimitRequestValidationError is the validation error returned by
+// UpdateLimitRequest.Validate if the designated constraints aren't met.
+type UpdateLimitRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e UpdateLimitRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e UpdateLimitRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e UpdateLimitRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e UpdateLimitRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e UpdateLimitRequestValidationError) ErrorName() string {
+	return "UpdateLimitRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e UpdateLimitRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sUpdateLimitRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = UpdateLimitRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = UpdateLimitRequestValidationError{}
+
+// Validate checks the field values on UpdateLimitResponse with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *UpdateLimitResponse) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	return nil
+}
+
+// UpdateLimitResponseValidationError is the validation error returned by
+// UpdateLimitResponse.Validate if the designated constraints aren't met.
+type UpdateLimitResponseValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e UpdateLimitResponseValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e UpdateLimitResponseValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e UpdateLimitResponseValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e UpdateLimitResponseValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e UpdateLimitResponseValidationError) ErrorName() string {
+	return "UpdateLimitResponseValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e UpdateLimitResponseValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sUpdateLimitResponse.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = UpdateLimitResponseValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = UpdateLimitResponseValidationError{}

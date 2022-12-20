@@ -10,11 +10,12 @@ import (
 )
 
 type peerController struct {
-	cfg           *GroupConfig
-	limiter       *rate.Limiter
-	logger        *zap.SugaredLogger
-	interceptChan chan peerInterceptEvent
-	resolvedChan  chan circuitKey
+	cfg             Limit
+	limiter         *rate.Limiter
+	logger          *zap.SugaredLogger
+	interceptChan   chan peerInterceptEvent
+	resolvedChan    chan circuitKey
+	updateLimitChan chan Limit
 
 	htlcs map[circuitKey]struct{}
 }
@@ -25,23 +26,24 @@ type peerInterceptEvent struct {
 	peerInitiated bool
 }
 
-func newPeerController(logger *zap.SugaredLogger, cfg *GroupConfig,
+func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 	htlcs map[circuitKey]struct{}) *peerController {
 
 	var limiter *rate.Limiter
 
 	// Skip if no interval set.
 	limit := rate.Inf
-	if cfg.HtlcMinInterval > 0 {
-		limit = rate.Every(cfg.HtlcMinInterval)
+	if cfg.MinIntervalMs > 0 {
+		limit = rate.Every(time.Duration(cfg.MinIntervalMs) * time.Millisecond)
 	}
-	limiter = rate.NewLimiter(limit, cfg.HtlcBurstSize)
+	limiter = rate.NewLimiter(limit, int(cfg.BurstSize))
 
 	logger.Infow("Peer controller initialized",
-		"htlcMinInterval", cfg.HtlcMinInterval,
-		"htlcBurstSize", cfg.HtlcBurstSize,
-		"maxPendingHtlcs", cfg.MaxPendingHtlcs,
-		"mode", cfg.Mode)
+		"htlcMinInterval", cfg.MinIntervalMs,
+		"htlcBurstSize", cfg.BurstSize,
+		"maxPendingHtlcs", cfg.MaxPending)
+
+	// "mode", cfg.Mode)
 
 	// Log initial pending htlcs.
 	for h := range htlcs {
@@ -49,12 +51,23 @@ func newPeerController(logger *zap.SugaredLogger, cfg *GroupConfig,
 	}
 
 	return &peerController{
-		cfg:           cfg,
-		limiter:       limiter,
-		logger:        logger,
-		interceptChan: make(chan peerInterceptEvent),
-		resolvedChan:  make(chan circuitKey),
-		htlcs:         htlcs,
+		cfg:             cfg,
+		limiter:         limiter,
+		logger:          logger,
+		interceptChan:   make(chan peerInterceptEvent),
+		resolvedChan:    make(chan circuitKey),
+		updateLimitChan: make(chan Limit),
+		htlcs:           htlcs,
+	}
+}
+
+func (p *peerController) updateLimit(ctx context.Context, limit Limit) error {
+	select {
+	case p.updateLimitChan <- limit:
+		return nil
+
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -66,8 +79,8 @@ func (p *peerController) run(ctx context.Context) error {
 	for {
 		// New htlcs are allowed when the number of pending htlcs is below the
 		// limit, or no limit has been set.
-		newHtlcAllowed := p.cfg.MaxPendingHtlcs == 0 ||
-			len(p.htlcs) < p.cfg.MaxPendingHtlcs
+		newHtlcAllowed := p.cfg.MaxPending == 0 ||
+			len(p.htlcs) < int(p.cfg.MaxPending)
 
 		// If an htlc can be forwarded, make a reservation on the rate limiter
 		// if it does not already exist.
@@ -96,8 +109,10 @@ func (p *peerController) run(ctx context.Context) error {
 				continue
 			}
 
-			if p.cfg.Mode == ModeQueue ||
-				(p.cfg.Mode == ModeQueuePeerInitiated && event.peerInitiated) {
+			//mode := p.cfg.Mode
+			mode := ModeFail
+			if mode == ModeQueue ||
+				(mode == ModeQueuePeerInitiated && event.peerInitiated) {
 
 				queue.PushFront(event)
 
@@ -165,6 +180,12 @@ func (p *peerController) run(ctx context.Context) error {
 
 			logger := p.keyLogger(key)
 			logger.Infow("Resolved htlc", "pending_htlcs", len(p.htlcs))
+
+		case limit := <-p.updateLimitChan:
+			p.cfg = limit
+
+			p.limiter.SetBurst(int(limit.BurstSize))
+			p.limiter.SetLimit(rate.Limit(limit.MinIntervalMs))
 
 		case <-ctx.Done():
 			return ctx.Err()

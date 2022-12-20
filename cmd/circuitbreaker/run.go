@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"net"
-	"path/filepath"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/lightningequipment/circuitbreaker"
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
+	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -15,10 +15,20 @@ import (
 )
 
 func run(c *cli.Context) error {
-	configPath := filepath.Join(c.String("configdir"), confFn)
-	loader := newConfigLoader(configPath)
+	// Open database.
+	ctx := context.Background()
 
-	config, err := loader.load()
+	db, err := circuitbreaker.NewDb(ctx)
+	if err != nil {
+		return err
+	}
+
+	limit := circuitbreaker.Limit{
+		MinIntervalMs: 3,
+		BurstSize:     5,
+		MaxPending:    3,
+	}
+	err = db.SetLimit(ctx, &route.Vertex{1, 2, 4}, limit)
 	if err != nil {
 		return err
 	}
@@ -42,7 +52,7 @@ func run(c *cli.Context) error {
 	}
 	defer client.Close()
 
-	p := circuitbreaker.NewProcess(client, log, config)
+	p := circuitbreaker.NewProcess(client, log, db)
 
 	grpcServer := grpc.NewServer(
 		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer()),
@@ -51,7 +61,7 @@ func run(c *cli.Context) error {
 
 	reflection.Register(grpcServer)
 
-	server := circuitbreaker.NewServer()
+	server := circuitbreaker.NewServer(p)
 
 	circuitbreakerrpc.RegisterServiceServer(
 		grpcServer, server,

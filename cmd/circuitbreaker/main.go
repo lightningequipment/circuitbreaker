@@ -76,8 +76,6 @@ func extractPathArgs(ctx *cli.Context) (string, string, error) {
 }
 
 func main() {
-	defaultAppDir := btcutil.AppDataDir("circuitbreaker", false)
-
 	app := cli.NewApp()
 	app.Name = "circuitbreaker"
 	app.Version = build.Version() + " commit=" + build.Commit
@@ -106,11 +104,6 @@ func main() {
 		cli.StringFlag{
 			Name:  "macaroonpath",
 			Usage: "path to macaroon file",
-		},
-		cli.StringFlag{
-			Name:  "configdir",
-			Value: defaultAppDir,
-			Usage: "path to CircuitBreaker's base directory",
 		},
 		cli.StringFlag{
 			Name:  "listen",

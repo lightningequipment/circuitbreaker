@@ -47,11 +47,13 @@ type interceptEvent struct {
 
 type process struct {
 	client lndclient
-	cfg    *Config
+	db     *Db
+	limits *Limits
 	log    *zap.SugaredLogger
 
-	interceptChan chan interceptEvent
-	resolveChan   chan circuitKey
+	interceptChan   chan interceptEvent
+	resolveChan     chan circuitKey
+	updateLimitChan chan updateLimitEvent
 
 	identity route.Vertex
 	chanMap  map[uint64]*channel
@@ -63,18 +65,39 @@ type process struct {
 	resolvedCallback func()
 }
 
-func NewProcess(client lndclient, log *zap.SugaredLogger,
-	cfg *Config) *process {
-
+func NewProcess(client lndclient, log *zap.SugaredLogger, db *Db) *process {
 	return &process{
-		log:           log,
-		interceptChan: make(chan interceptEvent),
-		resolveChan:   make(chan circuitKey),
-		chanMap:       make(map[uint64]*channel),
-		aliasMap:      make(map[route.Vertex]string),
-		client:        client,
-		cfg:           cfg,
-		peerCtrls:     make(map[route.Vertex]*peerController),
+		log:             log,
+		client:          client,
+		interceptChan:   make(chan interceptEvent),
+		resolveChan:     make(chan circuitKey),
+		updateLimitChan: make(chan updateLimitEvent),
+		chanMap:         make(map[uint64]*channel),
+		aliasMap:        make(map[route.Vertex]string),
+		db:              db,
+		peerCtrls:       make(map[route.Vertex]*peerController),
+	}
+}
+
+type updateLimitEvent struct {
+	limit Limit
+	peer  *route.Vertex
+}
+
+func (p *process) UpdateLimit(ctx context.Context, peer *route.Vertex,
+	limit Limit) error {
+
+	update := updateLimitEvent{
+		limit: limit,
+		peer:  peer,
+	}
+
+	select {
+	case p.updateLimitChan <- update:
+		return nil
+
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -82,6 +105,12 @@ func (p *process) Run(ctx context.Context) error {
 	p.log.Info("CircuitBreaker started")
 
 	var err error
+
+	p.limits, err = p.db.GetLimits(ctx)
+	if err != nil {
+		return err
+	}
+
 	p.identity, err = p.client.getIdentity()
 	if err != nil {
 		return err
@@ -148,7 +177,10 @@ func (p *process) getPeerController(ctx context.Context, peer route.Vertex,
 func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 	startGo func(func() error), htlcs map[circuitKey]struct{}) *peerController {
 
-	peerCfg := p.cfg.forPeer(peer)
+	peerCfg, ok := p.limits.PerPeer[peer]
+	if !ok {
+		peerCfg = p.limits.Global
+	}
 
 	alias := p.getNodeAlias(peer)
 
@@ -235,6 +267,40 @@ func (p *process) eventLoop(ctx context.Context) error {
 
 			if p.resolvedCallback != nil {
 				p.resolvedCallback()
+			}
+
+		case update := <-p.updateLimitChan:
+			if update.peer == nil {
+				p.limits.Global = update.limit
+
+				// Update all controllers that have no specific limit.
+				for node, ctrl := range p.peerCtrls {
+					_, ok := p.limits.PerPeer[node]
+					if ok {
+						continue
+					}
+
+					err := ctrl.updateLimit(ctx, update.limit)
+					if err != nil {
+						return err
+					}
+				}
+			} else {
+				p.limits.PerPeer[*update.peer] = update.limit
+
+				// Update specific controller if it exists.
+				ctrl, ok := p.peerCtrls[*update.peer]
+				if ok {
+					err := ctrl.updateLimit(ctx, update.limit)
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+			err := p.db.SetLimit(ctx, update.peer, update.limit)
+			if err != nil {
+				return err
 			}
 
 		case <-ctx.Done():

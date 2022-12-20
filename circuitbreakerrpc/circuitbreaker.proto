@@ -6,8 +6,19 @@ option go_package = "github.com/lightningequipment/circuitbreaker/circuitbreaker
 
 service Service {
     rpc GetInfo (GetInfoRequest) returns (GetInfoResponse);
+
+    rpc UpdateLimit (UpdateLimitRequest) returns (UpdateLimitResponse);
 }
 
 message GetInfoRequest {}
 
 message GetInfoResponse {}
+
+message UpdateLimitRequest {
+    bytes node = 1;
+    int64 min_interval_ms = 2;
+	int64 burst_size = 3;
+	int64 max_pending = 4;
+}
+
+message UpdateLimitResponse {}
