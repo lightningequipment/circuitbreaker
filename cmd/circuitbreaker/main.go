@@ -112,6 +112,11 @@ func main() {
 			Value: defaultAppDir,
 			Usage: "path to CircuitBreaker's base directory",
 		},
+		cli.StringFlag{
+			Name:  "listen",
+			Value: "127.0.0.1:9234",
+			Usage: "grpc server listen address",
+		},
 	}
 
 	app.Action = run

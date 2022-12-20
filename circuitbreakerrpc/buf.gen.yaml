@@ -1,0 +1,15 @@
+version: v1
+plugins:
+  - name: go
+    out: .
+    opt: paths=source_relative
+    strategy: directory
+  - name: go-grpc
+    out: .
+    opt: paths=source_relative
+  - name: grpc-gateway
+    out: .
+    opt: logtostderr=true,paths=source_relative
+  - name: validate
+    out: .
+    opt: lang=go,paths=source_relative

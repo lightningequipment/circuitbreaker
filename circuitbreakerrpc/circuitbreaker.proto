@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package circuitbreaker;
+
+option go_package = "github.com/lightningequipment/circuitbreaker/circuitbreakerrpc";
+
+service Service {
+    rpc GetInfo (GetInfoRequest) returns (GetInfoResponse);
+}
+
+message GetInfoRequest {}
+
+message GetInfoResponse {}
