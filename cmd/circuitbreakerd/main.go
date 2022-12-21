@@ -77,7 +77,7 @@ func extractPathArgs(ctx *cli.Context) (string, string, error) {
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "circuitbreaker"
+	app.Name = "circuitbreakerd"
 	app.Version = build.Version() + " commit=" + build.Commit
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
