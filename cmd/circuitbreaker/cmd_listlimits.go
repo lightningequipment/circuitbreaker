@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"os"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
 	"github.com/urfave/cli"
 	"google.golang.org/grpc"
@@ -24,9 +25,22 @@ func listLimits(c *cli.Context) error {
 		return err
 	}
 
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"NODE", "MIN_INTERVAL_MS", "BURST_SIZE", "MAX_PENDING"})
+
 	for _, limit := range resp.Limits {
-		fmt.Printf("%v\n", limit.Node)
+		node := limit.Node
+		if node == "" {
+			node = "<global>"
+		}
+
+		t.AppendRow(table.Row{
+			node, limit.MinIntervalMs, limit.BurstSize, limit.MaxPending,
+		})
 	}
+
+	t.Render()
 
 	return nil
 }
