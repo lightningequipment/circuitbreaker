@@ -15,11 +15,11 @@ service Service {
 message GetInfoRequest {}
 
 message GetInfoResponse {
-    bytes connected_node = 1;
+    string connected_node = 1;
 }
 
 message UpdateLimitRequest {
-    bytes node = 1;
+    string node = 1;
     int64 min_interval_ms = 2;
 	int64 burst_size = 3;
 	int64 max_pending = 4;
@@ -34,7 +34,7 @@ message ListLimitsResponse {
 }
 
 message Limit {
-    bytes node = 1;
+    string node = 1;
     int64 min_interval_ms = 2;
 	int64 burst_size = 3;
 	int64 max_pending = 4;

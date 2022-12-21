@@ -2,6 +2,7 @@ package circuitbreaker
 
 import (
 	"context"
+	"encoding/hex"
 
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
@@ -33,7 +34,7 @@ func (s *server) GetInfo(ctx context.Context,
 	}
 
 	return &circuitbreakerrpc.GetInfoResponse{
-		ConnectedNode: key[:],
+		ConnectedNode: hex.EncodeToString(key[:]),
 	}, nil
 }
 
@@ -43,7 +44,7 @@ func (s *server) UpdateLimit(ctx context.Context,
 
 	var peer *route.Vertex
 	if len(req.Node) > 0 {
-		node, err := route.NewVertexFromBytes(req.Node)
+		node, err := route.NewVertexFromStr(req.Node)
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +90,7 @@ func (s *server) ListLimits(ctx context.Context,
 
 	for peer, limit := range limits.PerPeer {
 		rpcLimit := &circuitbreakerrpc.Limit{
-			Node:          peer[:],
+			Node:          hex.EncodeToString(peer[:]),
 			MinIntervalMs: limit.MinIntervalMs,
 			BurstSize:     limit.BurstSize,
 			MaxPending:    limit.MaxPending,
