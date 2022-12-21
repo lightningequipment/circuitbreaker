@@ -6,21 +6,26 @@ import (
 
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
+	"go.uber.org/zap"
 )
 
 type server struct {
 	process *process
 	lnd     lndclient
 	db      *Db
+	log     *zap.SugaredLogger
 
 	circuitbreakerrpc.UnimplementedServiceServer
 }
 
-func NewServer(process *process, lnd lndclient, db *Db) *server {
+func NewServer(log *zap.SugaredLogger, process *process, lnd lndclient,
+	db *Db) *server {
+
 	return &server{
 		process: process,
 		lnd:     lnd,
 		db:      db,
+		log:     log,
 	}
 }
 
@@ -57,6 +62,8 @@ func (s *server) UpdateLimit(ctx context.Context,
 		BurstSize:     req.BurstSize,
 		MaxPending:    req.MaxPending,
 	}
+
+	s.log.Infow("Updating limit", "node", peer, "limit", limit)
 
 	err := s.db.SetLimit(ctx, peer, limit)
 	if err != nil {

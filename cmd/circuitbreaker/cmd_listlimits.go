@@ -7,15 +7,13 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
 	"github.com/urfave/cli"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func listLimits(c *cli.Context) error {
 	// Open database.
 	ctx := context.Background()
 
-	client, err := getClient(ctx, c.GlobalString("rpcserver"))
+	client, err := getClientFromContext(ctx, c)
 	if err != nil {
 		return err
 	}
@@ -43,21 +41,4 @@ func listLimits(c *cli.Context) error {
 	t.Render()
 
 	return nil
-}
-
-func getClient(ctx context.Context, host string) (
-	circuitbreakerrpc.ServiceClient, error) {
-
-	insecure := insecure.NewCredentials()
-
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure),
-	}
-
-	conn, err := grpc.DialContext(ctx, host, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return circuitbreakerrpc.NewServiceClient(conn), nil
 }
