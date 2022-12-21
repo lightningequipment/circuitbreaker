@@ -30,12 +30,28 @@ message UpdateLimitResponse {}
 message ListLimitsRequest {}
 
 message ListLimitsResponse {
-    repeated Limit limits = 1;
+    repeated int64 counter_intervals_sec = 1;
+
+    Limit global_limit = 2;
+
+    repeated NodeLimit limits = 3;
+}
+
+message NodeLimit {
+    string node = 1;
+
+    Limit limit = 3;
+
+    repeated Counter counters = 6;
 }
 
 message Limit {
-    string node = 1;
-    int64 min_interval_ms = 2;
-	int64 burst_size = 3;
-	int64 max_pending = 4;
+    int64 min_interval_ms = 3;
+	int64 burst_size = 4;
+	int64 max_pending = 5;
+}
+
+message Counter {
+    int64 total = 1;
+    int64 successes = 2;
 }

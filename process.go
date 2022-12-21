@@ -50,14 +50,23 @@ type resolvedEvent struct {
 	settled bool
 }
 
+type rateCounters struct {
+	counters map[route.Vertex][]rateCounts
+}
+
+type rateCountersRequest struct {
+	counters chan *rateCounters
+}
+
 type process struct {
 	client lndclient
 	limits *Limits
 	log    *zap.SugaredLogger
 
-	interceptChan   chan interceptEvent
-	resolveChan     chan resolvedEvent
-	updateLimitChan chan updateLimitEvent
+	interceptChan           chan interceptEvent
+	resolveChan             chan resolvedEvent
+	updateLimitChan         chan updateLimitEvent
+	rateCountersRequestChan chan rateCountersRequest
 
 	identity route.Vertex
 	chanMap  map[uint64]*channel
@@ -71,15 +80,16 @@ type process struct {
 
 func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits) *process {
 	return &process{
-		log:             log,
-		client:          client,
-		interceptChan:   make(chan interceptEvent),
-		resolveChan:     make(chan resolvedEvent),
-		updateLimitChan: make(chan updateLimitEvent),
-		chanMap:         make(map[uint64]*channel),
-		aliasMap:        make(map[route.Vertex]string),
-		peerCtrls:       make(map[route.Vertex]*peerController),
-		limits:          limits,
+		log:                     log,
+		client:                  client,
+		interceptChan:           make(chan interceptEvent),
+		resolveChan:             make(chan resolvedEvent),
+		updateLimitChan:         make(chan updateLimitEvent),
+		rateCountersRequestChan: make(chan rateCountersRequest),
+		chanMap:                 make(map[uint64]*channel),
+		aliasMap:                make(map[route.Vertex]string),
+		peerCtrls:               make(map[route.Vertex]*peerController),
+		limits:                  limits,
 	}
 }
 
@@ -297,9 +307,43 @@ func (p *process) eventLoop(ctx context.Context) error {
 				}
 			}
 
+		case req := <-p.rateCountersRequestChan:
+			allCounts := make(map[route.Vertex][]rateCounts)
+			for node, ctrl := range p.peerCtrls {
+				counts := ctrl.rate()
+
+				allCounts[node] = counts
+			}
+
+			req.counters <- &rateCounters{
+				counters: allCounts,
+			}
+
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+	}
+}
+
+func (p *process) getRateCounters(ctx context.Context) (
+	map[route.Vertex][]rateCounts, error) {
+
+	replyChan := make(chan *rateCounters)
+
+	select {
+	case p.rateCountersRequestChan <- rateCountersRequest{
+		counters: replyChan,
+	}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	select {
+	case reply := <-replyChan:
+		return reply.counters, nil
+
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 

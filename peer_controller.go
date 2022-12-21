@@ -5,9 +5,33 @@ import (
 	"context"
 	"time"
 
+	"github.com/paulbellamy/ratecounter"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
+
+type eventCounter struct {
+	total     *ratecounter.RateCounter
+	successes *ratecounter.RateCounter
+}
+
+func newEventCounter(interval time.Duration) *eventCounter {
+	return &eventCounter{
+		total:     ratecounter.NewRateCounter(interval),
+		successes: ratecounter.NewRateCounter(interval),
+	}
+}
+
+func (e *eventCounter) Incr(success bool) {
+	e.total.Incr(1)
+	if success {
+		e.successes.Incr(1)
+	}
+}
+
+func (e *eventCounter) Rates() (int64, int64) {
+	return e.successes.Rate(), e.total.Rate()
+}
 
 type peerController struct {
 	cfg             Limit
@@ -17,6 +41,8 @@ type peerController struct {
 	resolvedChan    chan resolvedEvent
 	updateLimitChan chan Limit
 
+	rateCounters []*eventCounter
+
 	htlcs map[circuitKey]struct{}
 }
 
@@ -25,6 +51,12 @@ type peerInterceptEvent struct {
 
 	peerInitiated bool
 }
+
+type rateCounts struct {
+	total, success int64
+}
+
+var rateCounterIntervals = []time.Duration{5 * time.Minute, time.Hour, 24 * time.Hour}
 
 func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 	htlcs map[circuitKey]struct{}) *peerController {
@@ -50,6 +82,11 @@ func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 		logger.Infow("Initial pending htlc", "channel", h.channel, "htlc", h.htlc)
 	}
 
+	rateCounters := make([]*eventCounter, len(rateCounterIntervals))
+	for idx, interval := range rateCounterIntervals {
+		rateCounters[idx] = newEventCounter(interval)
+	}
+
 	return &peerController{
 		cfg:             cfg,
 		limiter:         limiter,
@@ -58,7 +95,21 @@ func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 		resolvedChan:    make(chan resolvedEvent),
 		updateLimitChan: make(chan Limit),
 		htlcs:           htlcs,
+		rateCounters:    rateCounters,
 	}
+}
+
+func (p *peerController) rate() []rateCounts {
+	allRateCounts := make([]rateCounts, len(p.rateCounters))
+	for idx, counter := range p.rateCounters {
+		success, total := counter.Rates()
+		allRateCounts[idx] = rateCounts{
+			success: success,
+			total:   total,
+		}
+	}
+
+	return allRateCounts
 }
 
 func (p *peerController) updateLimit(ctx context.Context, limit Limit) error {
@@ -179,6 +230,11 @@ func (p *peerController) run(ctx context.Context) error {
 			}
 
 			delete(p.htlcs, key)
+
+			// Update rate counters.
+			for _, counter := range p.rateCounters {
+				counter.Incr(resolvedEvent.settled)
+			}
 
 			logger := p.keyLogger(key)
 			logger.Infow("Resolved htlc", "settled", resolvedEvent.settled,

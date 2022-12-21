@@ -87,26 +87,76 @@ func (s *server) ListLimits(ctx context.Context,
 		return nil, err
 	}
 
-	var rpcLimits = []*circuitbreakerrpc.Limit{
-		{
-			MinIntervalMs: limits.Global.MinIntervalMs,
-			BurstSize:     limits.Global.BurstSize,
-			MaxPending:    limits.Global.MaxPending,
-		},
+	counters, err := s.process.getRateCounters(ctx)
+	if err != nil {
+		return nil, err
 	}
 
+	var rpcLimits = []*circuitbreakerrpc.NodeLimit{}
+
 	for peer, limit := range limits.PerPeer {
-		rpcLimit := &circuitbreakerrpc.Limit{
-			Node:          hex.EncodeToString(peer[:]),
-			MinIntervalMs: limit.MinIntervalMs,
-			BurstSize:     limit.BurstSize,
-			MaxPending:    limit.MaxPending,
+		rpcLimit := &circuitbreakerrpc.NodeLimit{
+			Node: hex.EncodeToString(peer[:]),
+			Limit: &circuitbreakerrpc.Limit{
+				MinIntervalMs: limit.MinIntervalMs,
+				BurstSize:     limit.BurstSize,
+				MaxPending:    limit.MaxPending,
+			},
 		}
+
+		counts, ok := counters[peer]
+		if !ok {
+			// Report all zeroes.
+			counts = make([]rateCounts, len(rateCounterIntervals))
+		}
+
+		rpcCounts := make([]*circuitbreakerrpc.Counter, len(counts))
+
+		for idx, count := range counts {
+			rpcCounts[idx] = &circuitbreakerrpc.Counter{
+				Total:     count.total,
+				Successes: count.success,
+			}
+		}
+
+		rpcLimit.Counters = rpcCounts
+
+		delete(counters, peer)
 
 		rpcLimits = append(rpcLimits, rpcLimit)
 	}
 
+	for peer, counts := range counters {
+		rpcLimit := &circuitbreakerrpc.NodeLimit{
+			Node: hex.EncodeToString(peer[:]),
+		}
+
+		rpcCounts := make([]*circuitbreakerrpc.Counter, len(counts))
+
+		for idx, count := range counts {
+			rpcCounts[idx] = &circuitbreakerrpc.Counter{
+				Total:     count.total,
+				Successes: count.success,
+			}
+		}
+
+		rpcLimit.Counters = rpcCounts
+
+		rpcLimits = append(rpcLimits, rpcLimit)
+	}
+
+	intervals := make([]int64, len(rateCounterIntervals))
+	for idx, interval := range rateCounterIntervals {
+		intervals[idx] = int64(interval.Seconds())
+	}
+
 	return &circuitbreakerrpc.ListLimitsResponse{
-		Limits: rpcLimits,
+		GlobalLimit: &circuitbreakerrpc.Limit{
+			MinIntervalMs: limits.Global.MinIntervalMs,
+			BurstSize:     limits.Global.BurstSize,
+			MaxPending:    limits.Global.MaxPending,
+		},
+		CounterIntervalsSec: intervals,
+		Limits:              rpcLimits,
 	}, nil
 }

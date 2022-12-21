@@ -382,6 +382,16 @@ func (m *ListLimitsResponse) Validate() error {
 		return nil
 	}
 
+	if v, ok := interface{}(m.GetGlobalLimit()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return ListLimitsResponseValidationError{
+				field:  "GlobalLimit",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
 	for idx, item := range m.GetLimits() {
 		_, _ = idx, item
 
@@ -456,14 +466,103 @@ var _ interface {
 	ErrorName() string
 } = ListLimitsResponseValidationError{}
 
+// Validate checks the field values on NodeLimit with the rules defined in the
+// proto definition for this message. If any rules are violated, an error is returned.
+func (m *NodeLimit) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	// no validation rules for Node
+
+	if v, ok := interface{}(m.GetLimit()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return NodeLimitValidationError{
+				field:  "Limit",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	for idx, item := range m.GetCounters() {
+		_, _ = idx, item
+
+		if v, ok := interface{}(item).(interface{ Validate() error }); ok {
+			if err := v.Validate(); err != nil {
+				return NodeLimitValidationError{
+					field:  fmt.Sprintf("Counters[%v]", idx),
+					reason: "embedded message failed validation",
+					cause:  err,
+				}
+			}
+		}
+
+	}
+
+	return nil
+}
+
+// NodeLimitValidationError is the validation error returned by
+// NodeLimit.Validate if the designated constraints aren't met.
+type NodeLimitValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e NodeLimitValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e NodeLimitValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e NodeLimitValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e NodeLimitValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e NodeLimitValidationError) ErrorName() string { return "NodeLimitValidationError" }
+
+// Error satisfies the builtin error interface
+func (e NodeLimitValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sNodeLimit.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = NodeLimitValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = NodeLimitValidationError{}
+
 // Validate checks the field values on Limit with the rules defined in the
 // proto definition for this message. If any rules are violated, an error is returned.
 func (m *Limit) Validate() error {
 	if m == nil {
 		return nil
 	}
-
-	// no validation rules for Node
 
 	// no validation rules for MinIntervalMs
 
@@ -527,3 +626,71 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = LimitValidationError{}
+
+// Validate checks the field values on Counter with the rules defined in the
+// proto definition for this message. If any rules are violated, an error is returned.
+func (m *Counter) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	// no validation rules for Total
+
+	// no validation rules for Successes
+
+	return nil
+}
+
+// CounterValidationError is the validation error returned by Counter.Validate
+// if the designated constraints aren't met.
+type CounterValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e CounterValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e CounterValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e CounterValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e CounterValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e CounterValidationError) ErrorName() string { return "CounterValidationError" }
+
+// Error satisfies the builtin error interface
+func (e CounterValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sCounter.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = CounterValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = CounterValidationError{}

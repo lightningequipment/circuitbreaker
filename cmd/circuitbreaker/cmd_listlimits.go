@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -23,22 +24,61 @@ func listLimits(c *cli.Context) error {
 		return err
 	}
 
+	printGlobalLimit(resp.GlobalLimit)
+
+	fmt.Println()
+
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"NODE", "MIN_INTERVAL_MS", "BURST_SIZE", "MAX_PENDING"})
+
+	headerRow1 := table.Row{"NODE", "RATE LIMIT", "RATE LIMIT", "MAX PENDING"}
+	headerRow2 := table.Row{"", "MIN INTERVAL MS", "BURST SIZE", ""}
+	for _, interval := range resp.CounterIntervalsSec {
+		header := fmt.Sprintf("%v SEC", interval)
+		headerRow1 = append(headerRow1, header, header)
+
+		headerRow2 = append(headerRow2, "SUCCESS", "TOTAL")
+	}
+
+	t.AppendHeader(headerRow1, table.RowConfig{AutoMerge: true})
+	t.AppendHeader(headerRow2)
 
 	for _, limit := range resp.Limits {
-		node := limit.Node
-		if node == "" {
-			node = "<global>"
+		var row table.Row
+		if limit.Limit == nil {
+			row = table.Row{
+				limit.Node, "<global>", "<global>", "<global>",
+			}
+		} else {
+			row = table.Row{
+				limit.Node, limit.Limit.MinIntervalMs, limit.Limit.BurstSize, limit.Limit.MaxPending,
+			}
 		}
 
-		t.AppendRow(table.Row{
-			node, limit.MinIntervalMs, limit.BurstSize, limit.MaxPending,
-		})
+		for _, counter := range limit.Counters {
+			row = append(row, counter.Successes, counter.Total)
+		}
+
+		t.AppendRow(row)
 	}
 
 	t.Render()
 
 	return nil
+}
+
+func printGlobalLimit(limit *circuitbreakerrpc.Limit) {
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+
+	headerRow1 := table.Row{"RATE LIMIT", "RATE LIMIT", "MAX PENDING"}
+	headerRow2 := table.Row{"MIN INTERVAL MS", "BURST SIZE", ""}
+	t.AppendHeader(headerRow1, table.RowConfig{AutoMerge: true})
+	t.AppendHeader(headerRow2)
+
+	t.AppendRow(table.Row{
+		limit.MinIntervalMs, limit.BurstSize, limit.MaxPending,
+	})
+
+	t.Render()
 }
