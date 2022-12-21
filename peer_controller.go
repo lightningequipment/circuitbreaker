@@ -14,7 +14,7 @@ type peerController struct {
 	limiter         *rate.Limiter
 	logger          *zap.SugaredLogger
 	interceptChan   chan peerInterceptEvent
-	resolvedChan    chan circuitKey
+	resolvedChan    chan resolvedEvent
 	updateLimitChan chan Limit
 
 	htlcs map[circuitKey]struct{}
@@ -55,7 +55,7 @@ func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 		limiter:         limiter,
 		logger:          logger,
 		interceptChan:   make(chan peerInterceptEvent),
-		resolvedChan:    make(chan circuitKey),
+		resolvedChan:    make(chan resolvedEvent),
 		updateLimitChan: make(chan Limit),
 		htlcs:           htlcs,
 	}
@@ -167,7 +167,9 @@ func (p *peerController) run(ctx context.Context) error {
 
 		// An htlc has been resolved in lnd. Remove it from the pending htlcs
 		// map to free up the slot for another htlc.
-		case key := <-p.resolvedChan:
+		case resolvedEvent := <-p.resolvedChan:
+			key := resolvedEvent.circuitKey
+
 			_, ok := p.htlcs[key]
 			if !ok {
 				// Do not log here, because the event is still coming even for
@@ -179,7 +181,8 @@ func (p *peerController) run(ctx context.Context) error {
 			delete(p.htlcs, key)
 
 			logger := p.keyLogger(key)
-			logger.Infow("Resolved htlc", "pending_htlcs", len(p.htlcs))
+			logger.Infow("Resolved htlc", "settled", resolvedEvent.settled,
+				"pending_htlcs", len(p.htlcs))
 
 		case limit := <-p.updateLimitChan:
 			p.cfg = limit
@@ -220,7 +223,7 @@ func (p *peerController) process(ctx context.Context,
 }
 
 func (p *peerController) resolved(ctx context.Context,
-	key circuitKey) error {
+	key resolvedEvent) error {
 
 	select {
 	case p.resolvedChan <- key:

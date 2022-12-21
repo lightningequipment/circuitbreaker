@@ -45,13 +45,18 @@ type interceptEvent struct {
 	resume    func(bool) error
 }
 
+type resolvedEvent struct {
+	circuitKey
+	settled bool
+}
+
 type process struct {
 	client lndclient
 	limits *Limits
 	log    *zap.SugaredLogger
 
 	interceptChan   chan interceptEvent
-	resolveChan     chan circuitKey
+	resolveChan     chan resolvedEvent
 	updateLimitChan chan updateLimitEvent
 
 	identity route.Vertex
@@ -69,7 +74,7 @@ func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits) *proce
 		log:             log,
 		client:          client,
 		interceptChan:   make(chan interceptEvent),
-		resolveChan:     make(chan circuitKey),
+		resolveChan:     make(chan resolvedEvent),
 		updateLimitChan: make(chan updateLimitEvent),
 		chanMap:         make(map[uint64]*channel),
 		aliasMap:        make(map[route.Vertex]string),
@@ -247,15 +252,15 @@ func (p *process) eventLoop(ctx context.Context) error {
 				return err
 			}
 
-		case resolvedKey := <-p.resolveChan:
-			chanInfo, err := p.getChanInfo(resolvedKey.channel)
+		case resolvedEvent := <-p.resolveChan:
+			chanInfo, err := p.getChanInfo(resolvedEvent.channel)
 			if err != nil {
 				return err
 			}
 
 			ctrl := p.getPeerController(ctx, chanInfo.peer, group.Go)
 
-			if err := ctrl.resolved(ctx, resolvedKey); err != nil {
+			if err := ctrl.resolved(ctx, resolvedEvent); err != nil {
 				return err
 			}
 
@@ -311,8 +316,11 @@ func (p *process) processHtlcEvents(ctx context.Context,
 			continue
 		}
 
+		var settled bool
 		switch event.Event.(type) {
 		case *routerrpc.HtlcEvent_SettleEvent:
+			settled = true
+
 		case *routerrpc.HtlcEvent_ForwardFailEvent:
 		case *routerrpc.HtlcEvent_LinkFailEvent:
 
@@ -321,9 +329,12 @@ func (p *process) processHtlcEvents(ctx context.Context,
 		}
 
 		select {
-		case p.resolveChan <- circuitKey{
-			channel: event.IncomingChannelId,
-			htlc:    event.IncomingHtlcId,
+		case p.resolveChan <- resolvedEvent{
+			settled: settled,
+			circuitKey: circuitKey{
+				channel: event.IncomingChannelId,
+				htlc:    event.IncomingHtlcId,
+			},
 		}:
 
 		case <-ctx.Done():
