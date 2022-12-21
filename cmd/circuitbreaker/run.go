@@ -52,7 +52,12 @@ func run(c *cli.Context) error {
 	}
 	defer client.Close()
 
-	p := circuitbreaker.NewProcess(client, log, db)
+	limits, err := db.GetLimits(ctx)
+	if err != nil {
+		return err
+	}
+
+	p := circuitbreaker.NewProcess(client, log, limits)
 
 	grpcServer := grpc.NewServer(
 		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer()),
@@ -61,7 +66,7 @@ func run(c *cli.Context) error {
 
 	reflection.Register(grpcServer)
 
-	server := circuitbreaker.NewServer(p, client)
+	server := circuitbreaker.NewServer(p, client, db)
 
 	circuitbreakerrpc.RegisterServiceServer(
 		grpcServer, server,

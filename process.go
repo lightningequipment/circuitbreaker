@@ -47,7 +47,6 @@ type interceptEvent struct {
 
 type process struct {
 	client lndclient
-	db     *Db
 	limits *Limits
 	log    *zap.SugaredLogger
 
@@ -65,7 +64,7 @@ type process struct {
 	resolvedCallback func()
 }
 
-func NewProcess(client lndclient, log *zap.SugaredLogger, db *Db) *process {
+func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits) *process {
 	return &process{
 		log:             log,
 		client:          client,
@@ -74,8 +73,8 @@ func NewProcess(client lndclient, log *zap.SugaredLogger, db *Db) *process {
 		updateLimitChan: make(chan updateLimitEvent),
 		chanMap:         make(map[uint64]*channel),
 		aliasMap:        make(map[route.Vertex]string),
-		db:              db,
 		peerCtrls:       make(map[route.Vertex]*peerController),
+		limits:          limits,
 	}
 }
 
@@ -105,11 +104,6 @@ func (p *process) Run(ctx context.Context) error {
 	p.log.Info("CircuitBreaker started")
 
 	var err error
-
-	p.limits, err = p.db.GetLimits(ctx)
-	if err != nil {
-		return err
-	}
 
 	p.identity, err = p.client.getIdentity()
 	if err != nil {
@@ -296,11 +290,6 @@ func (p *process) eventLoop(ctx context.Context) error {
 						return err
 					}
 				}
-			}
-
-			err := p.db.SetLimit(ctx, update.peer, update.limit)
-			if err != nil {
-				return err
 			}
 
 		case <-ctx.Done():

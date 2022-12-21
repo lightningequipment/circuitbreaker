@@ -306,3 +306,224 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = UpdateLimitResponseValidationError{}
+
+// Validate checks the field values on ListLimitsRequest with the rules defined
+// in the proto definition for this message. If any rules are violated, an
+// error is returned.
+func (m *ListLimitsRequest) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	return nil
+}
+
+// ListLimitsRequestValidationError is the validation error returned by
+// ListLimitsRequest.Validate if the designated constraints aren't met.
+type ListLimitsRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e ListLimitsRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e ListLimitsRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e ListLimitsRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e ListLimitsRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e ListLimitsRequestValidationError) ErrorName() string {
+	return "ListLimitsRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e ListLimitsRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sListLimitsRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = ListLimitsRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = ListLimitsRequestValidationError{}
+
+// Validate checks the field values on ListLimitsResponse with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *ListLimitsResponse) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	for idx, item := range m.GetLimits() {
+		_, _ = idx, item
+
+		if v, ok := interface{}(item).(interface{ Validate() error }); ok {
+			if err := v.Validate(); err != nil {
+				return ListLimitsResponseValidationError{
+					field:  fmt.Sprintf("Limits[%v]", idx),
+					reason: "embedded message failed validation",
+					cause:  err,
+				}
+			}
+		}
+
+	}
+
+	return nil
+}
+
+// ListLimitsResponseValidationError is the validation error returned by
+// ListLimitsResponse.Validate if the designated constraints aren't met.
+type ListLimitsResponseValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e ListLimitsResponseValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e ListLimitsResponseValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e ListLimitsResponseValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e ListLimitsResponseValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e ListLimitsResponseValidationError) ErrorName() string {
+	return "ListLimitsResponseValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e ListLimitsResponseValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sListLimitsResponse.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = ListLimitsResponseValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = ListLimitsResponseValidationError{}
+
+// Validate checks the field values on Limit with the rules defined in the
+// proto definition for this message. If any rules are violated, an error is returned.
+func (m *Limit) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	// no validation rules for Node
+
+	// no validation rules for MinIntervalMs
+
+	// no validation rules for BurstSize
+
+	// no validation rules for MaxPending
+
+	return nil
+}
+
+// LimitValidationError is the validation error returned by Limit.Validate if
+// the designated constraints aren't met.
+type LimitValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e LimitValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e LimitValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e LimitValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e LimitValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e LimitValidationError) ErrorName() string { return "LimitValidationError" }
+
+// Error satisfies the builtin error interface
+func (e LimitValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sLimit.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = LimitValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = LimitValidationError{}

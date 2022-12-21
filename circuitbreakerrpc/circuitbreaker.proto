@@ -8,6 +8,8 @@ service Service {
     rpc GetInfo (GetInfoRequest) returns (GetInfoResponse);
 
     rpc UpdateLimit (UpdateLimitRequest) returns (UpdateLimitResponse);
+
+    rpc ListLimits (ListLimitsRequest) returns (ListLimitsResponse);
 }
 
 message GetInfoRequest {}
@@ -24,3 +26,16 @@ message UpdateLimitRequest {
 }
 
 message UpdateLimitResponse {}
+
+message ListLimitsRequest {}
+
+message ListLimitsResponse {
+    repeated Limit limits = 1;
+}
+
+message Limit {
+    bytes node = 1;
+    int64 min_interval_ms = 2;
+	int64 burst_size = 3;
+	int64 max_pending = 4;
+}
