@@ -9,13 +9,15 @@ import (
 
 type server struct {
 	process *process
+	lnd     lndclient
 
 	circuitbreakerrpc.UnimplementedServiceServer
 }
 
-func NewServer(process *process) *server {
+func NewServer(process *process, lnd lndclient) *server {
 	return &server{
 		process: process,
+		lnd:     lnd,
 	}
 }
 
@@ -23,7 +25,14 @@ func (s *server) GetInfo(ctx context.Context,
 	req *circuitbreakerrpc.GetInfoRequest) (*circuitbreakerrpc.GetInfoResponse,
 	error) {
 
-	return &circuitbreakerrpc.GetInfoResponse{}, nil
+	key, err := s.lnd.getIdentity()
+	if err != nil {
+		return nil, err
+	}
+
+	return &circuitbreakerrpc.GetInfoResponse{
+		ConnectedNode: key[:],
+	}, nil
 }
 
 func (s *server) UpdateLimit(ctx context.Context,

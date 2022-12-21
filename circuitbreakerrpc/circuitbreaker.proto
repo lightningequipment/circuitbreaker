@@ -12,7 +12,9 @@ service Service {
 
 message GetInfoRequest {}
 
-message GetInfoResponse {}
+message GetInfoResponse {
+    bytes connected_node = 1;
+}
 
 message UpdateLimitRequest {
     bytes node = 1;

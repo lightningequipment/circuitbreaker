@@ -61,7 +61,7 @@ func run(c *cli.Context) error {
 
 	reflection.Register(grpcServer)
 
-	server := circuitbreaker.NewServer(p)
+	server := circuitbreaker.NewServer(p, client)
 
 	circuitbreakerrpc.RegisterServiceServer(
 		grpcServer, server,

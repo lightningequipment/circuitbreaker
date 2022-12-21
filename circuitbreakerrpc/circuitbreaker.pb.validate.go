@@ -106,6 +106,8 @@ func (m *GetInfoResponse) Validate() error {
 		return nil
 	}
 
+	// no validation rules for ConnectedNode
+
 	return nil
 }
 
