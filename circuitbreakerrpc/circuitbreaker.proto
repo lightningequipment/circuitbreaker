@@ -50,7 +50,7 @@ message ListLimitsRequest {}
 message ListLimitsResponse {
     repeated int64 counter_intervals_sec = 1;
 
-    Limit global_limit = 2;
+    Limit default_limit = 2;
 
     repeated NodeLimit limits = 3;
 }

@@ -193,7 +193,7 @@ func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 
 	peerCfg, ok := p.limits.PerPeer[peer]
 	if !ok {
-		peerCfg = p.limits.Global
+		peerCfg = p.limits.Default
 	}
 
 	alias := p.getNodeAlias(peer)
@@ -286,7 +286,7 @@ func (p *process) eventLoop(ctx context.Context) error {
 		case update := <-p.updateLimitChan:
 			switch {
 			case update.peer == nil:
-				p.limits.Global = *update.limit
+				p.limits.Default = *update.limit
 
 				// Update all controllers that have no specific limit.
 				for node, ctrl := range p.peerCtrls {
@@ -315,10 +315,10 @@ func (p *process) eventLoop(ctx context.Context) error {
 			case update.limit == nil:
 				delete(p.limits.PerPeer, *update.peer)
 
-				// Apply global limit to peer controller.
+				// Apply default limit to peer controller.
 				ctrl, ok := p.peerCtrls[*update.peer]
 				if ok {
-					err := ctrl.updateLimit(ctx, p.limits.Global)
+					err := ctrl.updateLimit(ctx, p.limits.Default)
 					if err != nil {
 						return err
 					}

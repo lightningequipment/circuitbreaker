@@ -59,7 +59,7 @@ func (s *server) UpdateLimit(ctx context.Context,
 
 	s.log.Infow("Updating limit", "node", node, "limit", limit)
 
-	err = s.db.SetLimit(ctx, &node, limit)
+	err = s.db.UpdateLimit(ctx, node, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (s *server) UpdateDefaultLimit(ctx context.Context,
 
 	s.log.Infow("Updating default limit", "limit", limit)
 
-	err := s.db.SetLimit(ctx, nil, limit)
+	err := s.db.UpdateDefaultLimit(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -194,9 +194,9 @@ func (s *server) ListLimits(ctx context.Context,
 	}
 
 	return &circuitbreakerrpc.ListLimitsResponse{
-		GlobalLimit: &circuitbreakerrpc.Limit{
-			MaxHourlyRate: limits.Global.MaxHourlyRate,
-			MaxPending:    limits.Global.MaxPending,
+		DefaultLimit: &circuitbreakerrpc.Limit{
+			MaxHourlyRate: limits.Default.MaxHourlyRate,
+			MaxPending:    limits.Default.MaxPending,
 		},
 		CounterIntervalsSec: intervals,
 		Limits:              rpcLimits,

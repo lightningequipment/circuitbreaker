@@ -654,10 +654,10 @@ func (m *ListLimitsResponse) Validate() error {
 		return nil
 	}
 
-	if v, ok := interface{}(m.GetGlobalLimit()).(interface{ Validate() error }); ok {
+	if v, ok := interface{}(m.GetDefaultLimit()).(interface{ Validate() error }); ok {
 		if err := v.Validate(); err != nil {
 			return ListLimitsResponseValidationError{
-				field:  "GlobalLimit",
+				field:  "DefaultLimit",
 				reason: "embedded message failed validation",
 				cause:  err,
 			}

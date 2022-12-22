@@ -25,7 +25,7 @@ func listLimits(c *cli.Context) error {
 		return err
 	}
 
-	printGlobalLimit(resp.GlobalLimit)
+	printDefaultLimit(resp.DefaultLimit)
 
 	fmt.Println()
 
@@ -46,7 +46,7 @@ func listLimits(c *cli.Context) error {
 		var row table.Row
 		if limit.Limit == nil {
 			row = table.Row{
-				limit.Node, "<global>", "<global>",
+				limit.Node, "<default>", "<default>",
 			}
 		} else {
 			row = table.Row{
@@ -68,7 +68,7 @@ func listLimits(c *cli.Context) error {
 	return nil
 }
 
-func printGlobalLimit(limit *circuitbreakerrpc.Limit) {
+func printDefaultLimit(limit *circuitbreakerrpc.Limit) {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 
@@ -79,6 +79,6 @@ func printGlobalLimit(limit *circuitbreakerrpc.Limit) {
 		limit.MaxHourlyRate, limit.MaxPending,
 	})
 
-	fmt.Println("GLOBAL LIMITS")
+	fmt.Println("DEFAULT LIMITS")
 	t.Render()
 }

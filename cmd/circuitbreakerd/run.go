@@ -7,7 +7,6 @@ import (
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/lightningequipment/circuitbreaker"
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
-	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -19,15 +18,6 @@ func run(c *cli.Context) error {
 	ctx := context.Background()
 
 	db, err := circuitbreaker.NewDb(ctx)
-	if err != nil {
-		return err
-	}
-
-	limit := circuitbreaker.Limit{
-		MaxHourlyRate: 3,
-		MaxPending:    3,
-	}
-	err = db.SetLimit(ctx, &route.Vertex{1, 2, 4}, limit)
 	if err != nil {
 		return err
 	}
