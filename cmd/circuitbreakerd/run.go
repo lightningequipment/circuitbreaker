@@ -25,7 +25,6 @@ func run(c *cli.Context) error {
 
 	limit := circuitbreaker.Limit{
 		MinIntervalMs: 3,
-		BurstSize:     5,
 		MaxPending:    3,
 	}
 	err = db.SetLimit(ctx, &route.Vertex{1, 2, 4}, limit)

@@ -47,7 +47,6 @@ message NodeLimit {
 
 message Limit {
     int64 min_interval_ms = 3;
-	int64 burst_size = 4;
 	int64 max_pending = 5;
 }
 

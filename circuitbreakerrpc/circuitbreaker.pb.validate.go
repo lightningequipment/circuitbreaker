@@ -566,8 +566,6 @@ func (m *Limit) Validate() error {
 
 	// no validation rules for MinIntervalMs
 
-	// no validation rules for BurstSize
-
 	// no validation rules for MaxPending
 
 	return nil

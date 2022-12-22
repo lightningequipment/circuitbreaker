@@ -22,7 +22,6 @@ func NewDb(ctx context.Context) (*Db, error) {
 	CREATE TABLE IF NOT EXISTS limits (
 		node_in BLOB PRIMARY KEY,
 		htlc_min_interval INTEGER NOT NULL,
-		htlc_burst_size INTEGER NOT NULL,
 		htlc_max_pending INTEGER NOT NULL
 	);`
 
@@ -37,7 +36,6 @@ func NewDb(ctx context.Context) (*Db, error) {
 
 type Limit struct {
 	MinIntervalMs int64
-	BurstSize     int64
 	MaxPending    int64
 }
 
@@ -50,7 +48,7 @@ func (d *Db) SetLimit(ctx context.Context, peer *route.Vertex,
 	limit Limit) error {
 
 	const replace string = `
-	REPLACE INTO limits(node_in, htlc_min_interval, htlc_burst_size, htlc_max_pending) VALUES(?, ?, ?, ?);`
+	REPLACE INTO limits(node_in, htlc_min_interval, htlc_max_pending) VALUES(?, ?, ?);`
 
 	var peerSlice []byte
 	if peer != nil {
@@ -59,7 +57,7 @@ func (d *Db) SetLimit(ctx context.Context, peer *route.Vertex,
 
 	_, err := d.db.ExecContext(
 		ctx, replace, peerSlice,
-		limit.MinIntervalMs, limit.BurstSize, limit.MaxPending,
+		limit.MinIntervalMs, limit.MaxPending,
 	)
 	if err != nil {
 		return err
@@ -70,7 +68,7 @@ func (d *Db) SetLimit(ctx context.Context, peer *route.Vertex,
 
 func (d *Db) GetLimits(ctx context.Context) (*Limits, error) {
 	const query string = `
-	SELECT node_in, htlc_min_interval, htlc_burst_size, htlc_max_pending from limits;`
+	SELECT node_in, htlc_min_interval, htlc_max_pending from limits;`
 
 	rows, err := d.db.QueryContext(ctx, query)
 	if err != nil {
@@ -86,7 +84,7 @@ func (d *Db) GetLimits(ctx context.Context) (*Limits, error) {
 			nodeIn []byte
 		)
 		err := rows.Scan(
-			&nodeIn, &limit.MinIntervalMs, &limit.BurstSize, &limit.MaxPending,
+			&nodeIn, &limit.MinIntervalMs, &limit.MaxPending,
 		)
 		if err != nil {
 			return nil, err

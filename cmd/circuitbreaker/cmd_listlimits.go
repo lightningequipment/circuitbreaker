@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
@@ -31,15 +32,13 @@ func listLimits(c *cli.Context) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 
-	headerRow1 := table.Row{"NODE", "RATE LIMIT", "RATE LIMIT", "MAX PENDING"}
-	headerRow2 := table.Row{"", "MIN INTERVAL MS", "BURST SIZE", ""}
+	headerRow1 := table.Row{"", "LIMITS", "LIMITS"}
+	headerRow2 := table.Row{"NODE", "MIN INTERVAL S", "MAX PENDING"}
 	for _, interval := range resp.CounterIntervalsSec {
-		header := fmt.Sprintf("%v SEC", interval)
-		headerRow1 = append(headerRow1, header, header)
-
-		headerRow2 = append(headerRow2, "SUCCESS", "TOTAL")
+		header := fmt.Sprintf("%v", time.Duration(interval)*time.Second)
+		headerRow1 = append(headerRow1, "COUNTERS")
+		headerRow2 = append(headerRow2, header)
 	}
-
 	t.AppendHeader(headerRow1, table.RowConfig{AutoMerge: true})
 	t.AppendHeader(headerRow2)
 
@@ -47,21 +46,29 @@ func listLimits(c *cli.Context) error {
 		var row table.Row
 		if limit.Limit == nil {
 			row = table.Row{
-				limit.Node, "<global>", "<global>", "<global>",
+				limit.Node, "<global>", "<global>",
 			}
 		} else {
 			row = table.Row{
-				limit.Node, limit.Limit.MinIntervalMs, limit.Limit.BurstSize, limit.Limit.MaxPending,
+				limit.Node, limit.Limit.MinIntervalMs, limit.Limit.MaxPending,
 			}
 		}
 
 		for _, counter := range limit.Counters {
-			row = append(row, counter.Successes, counter.Total)
+			var counterString string
+			if counter.Total == 0 {
+				counterString = "0"
+			} else {
+				counterString = fmt.Sprintf("%v (%v %%)",
+					counter.Total, 100*counter.Successes/counter.Total)
+			}
+			row = append(row, counterString)
 		}
 
 		t.AppendRow(row)
 	}
 
+	fmt.Println("PER NODE LIMITS AND COUNTERS")
 	t.Render()
 
 	return nil
@@ -71,14 +78,13 @@ func printGlobalLimit(limit *circuitbreakerrpc.Limit) {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 
-	headerRow1 := table.Row{"RATE LIMIT", "RATE LIMIT", "MAX PENDING"}
-	headerRow2 := table.Row{"MIN INTERVAL MS", "BURST SIZE", ""}
-	t.AppendHeader(headerRow1, table.RowConfig{AutoMerge: true})
-	t.AppendHeader(headerRow2)
+	headerRow := table.Row{"MIN INTERVAL MS", "MAX PENDING"}
+	t.AppendHeader(headerRow)
 
 	t.AppendRow(table.Row{
-		limit.MinIntervalMs, limit.BurstSize, limit.MaxPending,
+		limit.MinIntervalMs, limit.MaxPending,
 	})
 
+	fmt.Println("GLOBAL LIMITS")
 	t.Render()
 }

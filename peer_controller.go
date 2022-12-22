@@ -58,6 +58,8 @@ type rateCounts struct {
 
 var rateCounterIntervals = []time.Duration{5 * time.Minute, time.Hour, 24 * time.Hour}
 
+const burstSize = 10
+
 func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 	htlcs map[circuitKey]struct{}) *peerController {
 
@@ -68,11 +70,10 @@ func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 	if cfg.MinIntervalMs > 0 {
 		limit = rate.Every(time.Duration(cfg.MinIntervalMs) * time.Millisecond)
 	}
-	limiter = rate.NewLimiter(limit, int(cfg.BurstSize))
+	limiter = rate.NewLimiter(limit, burstSize)
 
 	logger.Infow("Peer controller initialized",
 		"htlcMinInterval", cfg.MinIntervalMs,
-		"htlcBurstSize", cfg.BurstSize,
 		"maxPendingHtlcs", cfg.MaxPending)
 
 	// "mode", cfg.Mode)
@@ -243,7 +244,6 @@ func (p *peerController) run(ctx context.Context) error {
 		case limit := <-p.updateLimitChan:
 			p.cfg = limit
 
-			p.limiter.SetBurst(int(limit.BurstSize))
 			p.limiter.SetLimit(rate.Limit(limit.MinIntervalMs))
 
 		case <-ctx.Done():
