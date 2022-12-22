@@ -58,7 +58,7 @@ func (s *server) UpdateLimit(ctx context.Context,
 	}
 
 	limit := Limit{
-		MinIntervalMs: req.MinIntervalMs,
+		MaxHourlyRate: req.MaxHourlyRate,
 		MaxPending:    req.MaxPending,
 	}
 
@@ -97,7 +97,7 @@ func (s *server) ListLimits(ctx context.Context,
 		rpcLimit := &circuitbreakerrpc.NodeLimit{
 			Node: hex.EncodeToString(peer[:]),
 			Limit: &circuitbreakerrpc.Limit{
-				MinIntervalMs: limit.MinIntervalMs,
+				MaxHourlyRate: limit.MaxHourlyRate,
 				MaxPending:    limit.MaxPending,
 			},
 		}
@@ -150,7 +150,7 @@ func (s *server) ListLimits(ctx context.Context,
 
 	return &circuitbreakerrpc.ListLimitsResponse{
 		GlobalLimit: &circuitbreakerrpc.Limit{
-			MinIntervalMs: limits.Global.MinIntervalMs,
+			MaxHourlyRate: limits.Global.MaxHourlyRate,
 			MaxPending:    limits.Global.MaxPending,
 		},
 		CounterIntervalsSec: intervals,

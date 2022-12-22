@@ -18,8 +18,7 @@ func updateLimit(c *cli.Context) error {
 
 	req := &circuitbreakerrpc.UpdateLimitRequest{
 		Node:          c.String("node"),
-		MinIntervalMs: c.Int64("min_interval_ms"),
-		BurstSize:     c.Int64("burst_size"),
+		MaxHourlyRate: c.Int64("max_hourly_rate"),
 		MaxPending:    c.Int64("max_pending"),
 	}
 

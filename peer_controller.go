@@ -66,14 +66,10 @@ func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 	var limiter *rate.Limiter
 
 	// Skip if no interval set.
-	limit := rate.Inf
-	if cfg.MinIntervalMs > 0 {
-		limit = rate.Every(time.Duration(cfg.MinIntervalMs) * time.Millisecond)
-	}
-	limiter = rate.NewLimiter(limit, burstSize)
+	limiter = rate.NewLimiter(getRate(cfg.MaxHourlyRate), burstSize)
 
 	logger.Infow("Peer controller initialized",
-		"htlcMinInterval", cfg.MinIntervalMs,
+		"maxHourlyRate", cfg.MaxHourlyRate,
 		"maxPendingHtlcs", cfg.MaxPending)
 
 	// "mode", cfg.Mode)
@@ -244,12 +240,16 @@ func (p *peerController) run(ctx context.Context) error {
 		case limit := <-p.updateLimitChan:
 			p.cfg = limit
 
-			p.limiter.SetLimit(rate.Limit(limit.MinIntervalMs))
+			p.limiter.SetLimit(getRate(limit.MaxHourlyRate))
 
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
+}
+
+func getRate(maxHourlyRate int64) rate.Limit {
+	return rate.Limit(float64(maxHourlyRate) / 3600)
 }
 
 func (p *peerController) forward(event interceptEvent) error {

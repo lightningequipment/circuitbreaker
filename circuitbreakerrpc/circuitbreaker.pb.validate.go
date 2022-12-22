@@ -175,9 +175,7 @@ func (m *UpdateLimitRequest) Validate() error {
 
 	// no validation rules for Node
 
-	// no validation rules for MinIntervalMs
-
-	// no validation rules for BurstSize
+	// no validation rules for MaxHourlyRate
 
 	// no validation rules for MaxPending
 
@@ -564,7 +562,7 @@ func (m *Limit) Validate() error {
 		return nil
 	}
 
-	// no validation rules for MinIntervalMs
+	// no validation rules for MaxHourlyRate
 
 	// no validation rules for MaxPending
 

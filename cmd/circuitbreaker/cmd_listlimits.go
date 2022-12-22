@@ -33,7 +33,7 @@ func listLimits(c *cli.Context) error {
 	t.SetOutputMirror(os.Stdout)
 
 	headerRow1 := table.Row{"", "LIMITS", "LIMITS"}
-	headerRow2 := table.Row{"NODE", "MIN INTERVAL S", "MAX PENDING"}
+	headerRow2 := table.Row{"NODE", "MAX HOURLY RATE", "MAX PENDING"}
 	for _, interval := range resp.CounterIntervalsSec {
 		header := fmt.Sprintf("%v", time.Duration(interval)*time.Second)
 		headerRow1 = append(headerRow1, "COUNTERS")
@@ -50,25 +50,19 @@ func listLimits(c *cli.Context) error {
 			}
 		} else {
 			row = table.Row{
-				limit.Node, limit.Limit.MinIntervalMs, limit.Limit.MaxPending,
+				limit.Node, limit.Limit.MaxHourlyRate, limit.Limit.MaxPending,
 			}
 		}
 
 		for _, counter := range limit.Counters {
-			var counterString string
-			if counter.Total == 0 {
-				counterString = "0"
-			} else {
-				counterString = fmt.Sprintf("%v (%v %%)",
-					counter.Total, 100*counter.Successes/counter.Total)
-			}
+			counterString := fmt.Sprintf("%v / %v", counter.Successes, counter.Total)
 			row = append(row, counterString)
 		}
 
 		t.AppendRow(row)
 	}
 
-	fmt.Println("PER NODE LIMITS AND COUNTERS")
+	fmt.Println("PER NODE LIMITS AND COUNTERS (SUCCESS / FAILED / REJECTED)")
 	t.Render()
 
 	return nil
@@ -78,11 +72,11 @@ func printGlobalLimit(limit *circuitbreakerrpc.Limit) {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 
-	headerRow := table.Row{"MIN INTERVAL MS", "MAX PENDING"}
+	headerRow := table.Row{"MAX HOURLY RATE", "MAX PENDING"}
 	t.AppendHeader(headerRow)
 
 	t.AppendRow(table.Row{
-		limit.MinIntervalMs, limit.MaxPending,
+		limit.MaxHourlyRate, limit.MaxPending,
 	})
 
 	fmt.Println("GLOBAL LIMITS")
