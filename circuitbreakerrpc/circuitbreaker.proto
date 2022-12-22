@@ -9,6 +9,8 @@ service Service {
 
     rpc UpdateLimit (UpdateLimitRequest) returns (UpdateLimitResponse);
 
+    rpc UpdateDefaultLimit (UpdateDefaultLimitRequest) returns (UpdateDefaultLimitResponse);
+
     rpc ListLimits (ListLimitsRequest) returns (ListLimitsResponse);
 }
 
@@ -25,6 +27,14 @@ message UpdateLimitRequest {
 }
 
 message UpdateLimitResponse {}
+
+
+message UpdateDefaultLimitRequest {
+    int64 max_hourly_rate = 2;
+	int64 max_pending = 4;
+}
+
+message UpdateDefaultLimitResponse {}
 
 message ListLimitsRequest {}
 

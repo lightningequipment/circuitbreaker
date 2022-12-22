@@ -47,14 +47,9 @@ func (s *server) UpdateLimit(ctx context.Context,
 	req *circuitbreakerrpc.UpdateLimitRequest) (
 	*circuitbreakerrpc.UpdateLimitResponse, error) {
 
-	var peer *route.Vertex
-	if len(req.Node) > 0 {
-		node, err := route.NewVertexFromStr(req.Node)
-		if err != nil {
-			return nil, err
-		}
-
-		peer = &node
+	node, err := route.NewVertexFromStr(req.Node)
+	if err != nil {
+		return nil, err
 	}
 
 	limit := Limit{
@@ -62,19 +57,43 @@ func (s *server) UpdateLimit(ctx context.Context,
 		MaxPending:    req.MaxPending,
 	}
 
-	s.log.Infow("Updating limit", "node", peer, "limit", limit)
+	s.log.Infow("Updating limit", "node", node, "limit", limit)
 
-	err := s.db.SetLimit(ctx, peer, limit)
+	err = s.db.SetLimit(ctx, &node, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.process.UpdateLimit(ctx, peer, limit)
+	err = s.process.UpdateLimit(ctx, &node, limit)
 	if err != nil {
 		return nil, err
 	}
 
 	return &circuitbreakerrpc.UpdateLimitResponse{}, nil
+}
+
+func (s *server) UpdateDefaultLimit(ctx context.Context,
+	req *circuitbreakerrpc.UpdateDefaultLimitRequest) (
+	*circuitbreakerrpc.UpdateDefaultLimitResponse, error) {
+
+	limit := Limit{
+		MaxHourlyRate: req.MaxHourlyRate,
+		MaxPending:    req.MaxPending,
+	}
+
+	s.log.Infow("Updating default limit", "limit", limit)
+
+	err := s.db.SetLimit(ctx, nil, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.process.UpdateLimit(ctx, nil, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return &circuitbreakerrpc.UpdateDefaultLimitResponse{}, nil
 }
 
 func (s *server) ListLimits(ctx context.Context,
