@@ -9,6 +9,8 @@ service Service {
 
     rpc UpdateLimit (UpdateLimitRequest) returns (UpdateLimitResponse);
 
+    rpc ClearLimit (ClearLimitRequest) returns (ClearLimitResponse);
+
     rpc UpdateDefaultLimit (UpdateDefaultLimitRequest) returns (UpdateDefaultLimitResponse);
 
     rpc ListLimits (ListLimitsRequest) returns (ListLimitsResponse);
@@ -19,6 +21,13 @@ message GetInfoRequest {}
 message GetInfoResponse {
     string connected_node = 1;
 }
+
+
+message ClearLimitRequest {
+    string node = 1;
+}
+
+message ClearLimitResponse {}
 
 message UpdateLimitRequest {
     string node = 1;

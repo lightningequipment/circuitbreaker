@@ -3,6 +3,7 @@ package circuitbreaker
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/lightningnetwork/lnd/routing/route"
 	_ "modernc.org/sqlite"
@@ -45,22 +46,39 @@ type Limits struct {
 }
 
 func (d *Db) SetLimit(ctx context.Context, peer *route.Vertex,
-	limit Limit) error {
+	limit *Limit) error {
 
-	const replace string = `
-	REPLACE INTO limits(node_in, htlc_min_interval, htlc_max_hourly_rate) VALUES(?, ?, ?);`
-
+	if peer == nil && limit == nil {
+		return errors.New("cannot clear default limit")
+	}
 	var peerSlice []byte
 	if peer != nil {
 		peerSlice = peer[:]
 	}
 
-	_, err := d.db.ExecContext(
-		ctx, replace, peerSlice,
-		limit.MaxHourlyRate, limit.MaxPending,
+	const (
+		replace string = `
+	REPLACE INTO limits(node_in, htlc_min_interval, htlc_max_hourly_rate) VALUES(?, ?, ?);`
+
+		delete string = `
+	DELETE FROM limits WHERE node_in = ?;`
 	)
-	if err != nil {
-		return err
+
+	if limit == nil {
+		_, err := d.db.ExecContext(
+			ctx, delete, peerSlice,
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err := d.db.ExecContext(
+			ctx, replace, peerSlice,
+			limit.MaxHourlyRate, limit.MaxPending,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

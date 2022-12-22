@@ -59,6 +59,13 @@ func main() {
 			},
 		},
 		{
+			Name:   "clearlimit",
+			Action: clearLimit,
+			Flags: []cli.Flag{
+				nodeFlag,
+			},
+		},
+		{
 			Name:   "updatedefaultlimit",
 			Action: updateDefaultLimit,
 			Flags: []cli.Flag{

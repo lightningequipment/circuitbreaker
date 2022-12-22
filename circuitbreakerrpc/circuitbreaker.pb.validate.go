@@ -165,6 +165,142 @@ var _ interface {
 	ErrorName() string
 } = GetInfoResponseValidationError{}
 
+// Validate checks the field values on ClearLimitRequest with the rules defined
+// in the proto definition for this message. If any rules are violated, an
+// error is returned.
+func (m *ClearLimitRequest) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	// no validation rules for Node
+
+	return nil
+}
+
+// ClearLimitRequestValidationError is the validation error returned by
+// ClearLimitRequest.Validate if the designated constraints aren't met.
+type ClearLimitRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e ClearLimitRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e ClearLimitRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e ClearLimitRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e ClearLimitRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e ClearLimitRequestValidationError) ErrorName() string {
+	return "ClearLimitRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e ClearLimitRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sClearLimitRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = ClearLimitRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = ClearLimitRequestValidationError{}
+
+// Validate checks the field values on ClearLimitResponse with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *ClearLimitResponse) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	return nil
+}
+
+// ClearLimitResponseValidationError is the validation error returned by
+// ClearLimitResponse.Validate if the designated constraints aren't met.
+type ClearLimitResponseValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e ClearLimitResponseValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e ClearLimitResponseValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e ClearLimitResponseValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e ClearLimitResponseValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e ClearLimitResponseValidationError) ErrorName() string {
+	return "ClearLimitResponseValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e ClearLimitResponseValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sClearLimitResponse.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = ClearLimitResponseValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = ClearLimitResponseValidationError{}
+
 // Validate checks the field values on UpdateLimitRequest with the rules
 // defined in the proto definition for this message. If any rules are
 // violated, an error is returned.

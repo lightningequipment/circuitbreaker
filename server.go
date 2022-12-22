@@ -59,17 +59,41 @@ func (s *server) UpdateLimit(ctx context.Context,
 
 	s.log.Infow("Updating limit", "node", node, "limit", limit)
 
-	err = s.db.SetLimit(ctx, &node, limit)
+	err = s.db.SetLimit(ctx, &node, &limit)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.process.UpdateLimit(ctx, &node, limit)
+	err = s.process.UpdateLimit(ctx, &node, &limit)
 	if err != nil {
 		return nil, err
 	}
 
 	return &circuitbreakerrpc.UpdateLimitResponse{}, nil
+}
+
+func (s *server) ClearLimit(ctx context.Context,
+	req *circuitbreakerrpc.ClearLimitRequest) (
+	*circuitbreakerrpc.ClearLimitResponse, error) {
+
+	node, err := route.NewVertexFromStr(req.Node)
+	if err != nil {
+		return nil, err
+	}
+
+	s.log.Infow("Clearing limit", "node", node)
+
+	err = s.db.SetLimit(ctx, &node, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.process.UpdateLimit(ctx, &node, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &circuitbreakerrpc.ClearLimitResponse{}, nil
 }
 
 func (s *server) UpdateDefaultLimit(ctx context.Context,
@@ -83,12 +107,12 @@ func (s *server) UpdateDefaultLimit(ctx context.Context,
 
 	s.log.Infow("Updating default limit", "limit", limit)
 
-	err := s.db.SetLimit(ctx, nil, limit)
+	err := s.db.SetLimit(ctx, nil, &limit)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.process.UpdateLimit(ctx, nil, limit)
+	err = s.process.UpdateLimit(ctx, nil, &limit)
 	if err != nil {
 		return nil, err
 	}

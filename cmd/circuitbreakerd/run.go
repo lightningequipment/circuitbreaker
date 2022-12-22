@@ -27,7 +27,7 @@ func run(c *cli.Context) error {
 		MaxHourlyRate: 3,
 		MaxPending:    3,
 	}
-	err = db.SetLimit(ctx, &route.Vertex{1, 2, 4}, limit)
+	err = db.SetLimit(ctx, &route.Vertex{1, 2, 4}, &limit)
 	if err != nil {
 		return err
 	}

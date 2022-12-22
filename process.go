@@ -2,6 +2,7 @@ package circuitbreaker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -94,12 +95,16 @@ func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits) *proce
 }
 
 type updateLimitEvent struct {
-	limit Limit
+	limit *Limit
 	peer  *route.Vertex
 }
 
 func (p *process) UpdateLimit(ctx context.Context, peer *route.Vertex,
-	limit Limit) error {
+	limit *Limit) error {
+
+	if peer == nil && limit == nil {
+		return errors.New("cannot clear default limit")
+	}
 
 	update := updateLimitEvent{
 		limit: limit,
@@ -279,8 +284,9 @@ func (p *process) eventLoop(ctx context.Context) error {
 			}
 
 		case update := <-p.updateLimitChan:
-			if update.peer == nil {
-				p.limits.Global = update.limit
+			switch {
+			case update.peer == nil:
+				p.limits.Global = *update.limit
 
 				// Update all controllers that have no specific limit.
 				for node, ctrl := range p.peerCtrls {
@@ -289,18 +295,30 @@ func (p *process) eventLoop(ctx context.Context) error {
 						continue
 					}
 
-					err := ctrl.updateLimit(ctx, update.limit)
+					err := ctrl.updateLimit(ctx, *update.limit)
 					if err != nil {
 						return err
 					}
 				}
-			} else {
-				p.limits.PerPeer[*update.peer] = update.limit
+			case update.limit != nil:
+				p.limits.PerPeer[*update.peer] = *update.limit
 
 				// Update specific controller if it exists.
 				ctrl, ok := p.peerCtrls[*update.peer]
 				if ok {
-					err := ctrl.updateLimit(ctx, update.limit)
+					err := ctrl.updateLimit(ctx, *update.limit)
+					if err != nil {
+						return err
+					}
+				}
+
+			case update.limit == nil:
+				delete(p.limits.PerPeer, *update.peer)
+
+				// Apply global limit to peer controller.
+				ctrl, ok := p.peerCtrls[*update.peer]
+				if ok {
+					err := ctrl.updateLimit(ctx, p.limits.Global)
 					if err != nil {
 						return err
 					}
