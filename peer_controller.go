@@ -11,26 +11,45 @@ import (
 )
 
 type eventCounter struct {
-	total     *ratecounter.RateCounter
-	successes *ratecounter.RateCounter
+	fail    *ratecounter.RateCounter
+	success *ratecounter.RateCounter
+	reject  *ratecounter.RateCounter
 }
+
+type eventType int
+
+const (
+	eventSuccess eventType = iota
+	eventFail
+	eventReject
+)
 
 func newEventCounter(interval time.Duration) *eventCounter {
 	return &eventCounter{
-		total:     ratecounter.NewRateCounter(interval),
-		successes: ratecounter.NewRateCounter(interval),
+		fail:    ratecounter.NewRateCounter(interval),
+		success: ratecounter.NewRateCounter(interval),
+		reject:  ratecounter.NewRateCounter(interval),
 	}
 }
 
-func (e *eventCounter) Incr(success bool) {
-	e.total.Incr(1)
-	if success {
-		e.successes.Incr(1)
+func (e *eventCounter) Incr(event eventType) {
+	switch event {
+	case eventSuccess:
+		e.success.Incr(1)
+
+	case eventFail:
+		e.fail.Incr(1)
+
+	case eventReject:
+		e.reject.Incr(1)
+
+	default:
+		panic("unknown event type")
 	}
 }
 
-func (e *eventCounter) Rates() (int64, int64) {
-	return e.successes.Rate(), e.total.Rate()
+func (e *eventCounter) Rates() (int64, int64, int64) {
+	return e.success.Rate(), e.fail.Rate(), e.reject.Rate()
 }
 
 type peerController struct {
@@ -53,7 +72,7 @@ type peerInterceptEvent struct {
 }
 
 type rateCounts struct {
-	total, success int64
+	success, fail, reject int64
 }
 
 var rateCounterIntervals = []time.Duration{5 * time.Minute, time.Hour, 24 * time.Hour}
@@ -63,10 +82,8 @@ const burstSize = 10
 func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 	htlcs map[circuitKey]struct{}) *peerController {
 
-	var limiter *rate.Limiter
-
 	// Skip if no interval set.
-	limiter = rate.NewLimiter(getRate(cfg.MaxHourlyRate), burstSize)
+	limiter := rate.NewLimiter(getRate(cfg.MaxHourlyRate), burstSize)
 
 	logger.Infow("Peer controller initialized",
 		"maxHourlyRate", cfg.MaxHourlyRate,
@@ -99,10 +116,11 @@ func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 func (p *peerController) rate() []rateCounts {
 	allRateCounts := make([]rateCounts, len(p.rateCounters))
 	for idx, counter := range p.rateCounters {
-		success, total := counter.Rates()
+		success, fail, reject := counter.Rates()
 		allRateCounts[idx] = rateCounts{
 			success: success,
-			total:   total,
+			fail:    fail,
+			reject:  reject,
 		}
 	}
 
@@ -169,8 +187,18 @@ func (p *peerController) run(ctx context.Context) error {
 				continue
 			}
 
-			if !newHtlcAllowed {
+			failHtlc := func() error {
 				if err := event.resume(false); err != nil {
+					return err
+				}
+
+				p.incrCounter(eventReject)
+
+				return nil
+			}
+
+			if !newHtlcAllowed {
+				if err := failHtlc(); err != nil {
 					return err
 				}
 
@@ -180,7 +208,7 @@ func (p *peerController) run(ctx context.Context) error {
 			}
 
 			if !p.limiter.Allow() {
-				if err := event.resume(false); err != nil {
+				if err := failHtlc(); err != nil {
 					return err
 				}
 
@@ -229,8 +257,10 @@ func (p *peerController) run(ctx context.Context) error {
 			delete(p.htlcs, key)
 
 			// Update rate counters.
-			for _, counter := range p.rateCounters {
-				counter.Incr(resolvedEvent.settled)
+			if resolvedEvent.settled {
+				p.incrCounter(eventSuccess)
+			} else {
+				p.incrCounter(eventFail)
 			}
 
 			logger := p.keyLogger(key)
@@ -245,6 +275,12 @@ func (p *peerController) run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+	}
+}
+
+func (p *peerController) incrCounter(event eventType) {
+	for _, counter := range p.rateCounters {
+		counter.Incr(event)
 	}
 }
 

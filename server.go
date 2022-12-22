@@ -112,8 +112,9 @@ func (s *server) ListLimits(ctx context.Context,
 
 		for idx, count := range counts {
 			rpcCounts[idx] = &circuitbreakerrpc.Counter{
-				Total:     count.total,
-				Successes: count.success,
+				Success: count.success,
+				Fail:    count.fail,
+				Reject:  count.reject,
 			}
 		}
 
@@ -133,8 +134,9 @@ func (s *server) ListLimits(ctx context.Context,
 
 		for idx, count := range counts {
 			rpcCounts[idx] = &circuitbreakerrpc.Counter{
-				Total:     count.total,
-				Successes: count.success,
+				Success: count.success,
+				Fail:    count.fail,
+				Reject:  count.reject,
 			}
 		}
 

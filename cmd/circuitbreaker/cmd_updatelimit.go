@@ -17,9 +17,9 @@ func updateLimit(c *cli.Context) error {
 	}
 
 	req := &circuitbreakerrpc.UpdateLimitRequest{
-		Node:          c.String("node"),
-		MaxHourlyRate: c.Int64("max_hourly_rate"),
-		MaxPending:    c.Int64("max_pending"),
+		Node:          c.String(nodeFlag.Name),
+		MaxHourlyRate: c.Int64(maxHourlyRateFlag.Name),
+		MaxPending:    c.Int64(maxPendingFlag.Name),
 	}
 
 	_, err = client.UpdateLimit(ctx, req)

@@ -630,9 +630,11 @@ func (m *Counter) Validate() error {
 		return nil
 	}
 
-	// no validation rules for Total
+	// no validation rules for Fail
 
-	// no validation rules for Successes
+	// no validation rules for Success
+
+	// no validation rules for Reject
 
 	return nil
 }

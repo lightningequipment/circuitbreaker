@@ -50,6 +50,7 @@ message Limit {
 }
 
 message Counter {
-    int64 total = 1;
-    int64 successes = 2;
+    int64 fail = 1;
+    int64 success = 2;
+    int64 reject = 3;
 }

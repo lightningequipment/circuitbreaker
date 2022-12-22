@@ -55,7 +55,7 @@ func listLimits(c *cli.Context) error {
 		}
 
 		for _, counter := range limit.Counters {
-			counterString := fmt.Sprintf("%v / %v", counter.Successes, counter.Total)
+			counterString := fmt.Sprintf("%v / %v / %v", counter.Success, counter.Fail, counter.Reject)
 			row = append(row, counterString)
 		}
 

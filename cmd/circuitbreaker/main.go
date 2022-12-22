@@ -16,6 +16,23 @@ var (
 	defaultRPCHostPort = "localhost:9234"
 )
 
+var (
+	nodeFlag = cli.StringFlag{
+		Name:  "node",
+		Usage: "node pubkey",
+	}
+
+	maxHourlyRateFlag = cli.Int64Flag{
+		Name:     "max_hourly_rate",
+		Required: true,
+	}
+
+	maxPendingFlag = cli.Int64Flag{
+		Name:     "max_pending",
+		Required: true,
+	}
+)
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "circuitbreaker"
@@ -36,22 +53,9 @@ func main() {
 			Name:   "updatelimit",
 			Action: updateLimit,
 			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  "node",
-					Usage: "node pubkey",
-				},
-				cli.Int64Flag{
-					Name:     "min_interval_ms",
-					Required: true,
-				},
-				cli.Int64Flag{
-					Name:     "burst_size",
-					Required: true,
-				},
-				cli.Int64Flag{
-					Name:     "max_pending",
-					Required: true,
-				},
+				nodeFlag,
+				maxHourlyRateFlag,
+				maxPendingFlag,
 			},
 		},
 	}
