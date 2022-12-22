@@ -59,7 +59,7 @@ func (s *server) UpdateLimit(ctx context.Context,
 
 	s.log.Infow("Updating limit", "node", node, "limit", limit)
 
-	err = s.db.SetLimit(ctx, &node, &limit)
+	err = s.db.SetLimit(ctx, &node, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (s *server) ClearLimit(ctx context.Context,
 
 	s.log.Infow("Clearing limit", "node", node)
 
-	err = s.db.SetLimit(ctx, &node, nil)
+	err = s.db.ClearLimit(ctx, node)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (s *server) UpdateDefaultLimit(ctx context.Context,
 
 	s.log.Infow("Updating default limit", "limit", limit)
 
-	err := s.db.SetLimit(ctx, nil, &limit)
+	err := s.db.SetLimit(ctx, nil, limit)
 	if err != nil {
 		return nil, err
 	}
