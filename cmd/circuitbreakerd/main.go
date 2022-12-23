@@ -28,6 +28,12 @@ var (
 
 	defaultRPCPort     = "10009"
 	defaultRPCHostPort = "localhost:" + defaultRPCPort
+
+	restListenFlag = cli.StringFlag{
+		Name:  "restlisten",
+		Value: "127.0.0.1:9235",
+		Usage: "rest server listen address",
+	}
 )
 
 // extractPathArgs parses the TLS certificate and macaroon paths from the
@@ -110,6 +116,7 @@ func main() {
 			Value: "127.0.0.1:9234",
 			Usage: "grpc server listen address",
 		},
+		restListenFlag,
 	}
 
 	app.Action = run

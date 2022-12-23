@@ -2,18 +2,42 @@ syntax = "proto3";
 
 package circuitbreaker;
 
+import "google/api/annotations.proto";
+
 option go_package = "github.com/lightningequipment/circuitbreaker/circuitbreakerrpc";
 
 service Service {
-    rpc GetInfo (GetInfoRequest) returns (GetInfoResponse);
+    rpc GetInfo (GetInfoRequest) returns (GetInfoResponse) {
+        option (google.api.http) = {
+            get:"/info"
+        };
+    }
 
-    rpc UpdateLimit (UpdateLimitRequest) returns (UpdateLimitResponse);
+    rpc UpdateLimit (UpdateLimitRequest) returns (UpdateLimitResponse) {
+        option (google.api.http) = {
+            post: "/updatelimit/{node}"
+            body: "*"
+        };
+    }
 
-    rpc ClearLimit (ClearLimitRequest) returns (ClearLimitResponse);
+    rpc ClearLimit (ClearLimitRequest) returns (ClearLimitResponse) {
+        option (google.api.http) = {
+            post: "/clearlimit/{node}"
+        };
+    }
 
-    rpc UpdateDefaultLimit (UpdateDefaultLimitRequest) returns (UpdateDefaultLimitResponse);
+    rpc UpdateDefaultLimit (UpdateDefaultLimitRequest) returns (UpdateDefaultLimitResponse) {
+        option (google.api.http) = {
+            post: "/updatedefaultlimit"
+            body: "*"
+        };
+    }
 
-    rpc ListLimits (ListLimitsRequest) returns (ListLimitsResponse);
+    rpc ListLimits (ListLimitsRequest) returns (ListLimitsResponse) {
+        option (google.api.http) = {
+            get:"/limits"
+        };        
+    }
 }
 
 message GetInfoRequest {}

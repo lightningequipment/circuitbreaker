@@ -3,20 +3,23 @@ package main
 import (
 	"context"
 	"net"
+	"net/http"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/lightningequipment/circuitbreaker"
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 )
 
 func run(c *cli.Context) error {
-	// Open database.
 	ctx := context.Background()
 
+	// Open database.
 	db, err := circuitbreaker.NewDb(ctx)
 	if err != nil {
 		return err
@@ -67,7 +70,39 @@ func run(c *cli.Context) error {
 		return err
 	}
 
-	group, ctx := errgroup.WithContext(context.Background())
+	group, ctx := errgroup.WithContext(ctx)
+
+	group.Go(func() error {
+		// Create a client connection to the gRPC server we just started
+		// This is where the gRPC-Gateway proxies the requests
+		conn, err := grpc.DialContext(
+			ctx,
+			listenAddress,
+			grpc.WithBlock(),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err != nil {
+			return err
+		}
+
+		gwmux := runtime.NewServeMux()
+
+		// Register Greeter
+		err = circuitbreakerrpc.RegisterServiceHandler(ctx, gwmux, conn)
+		if err != nil {
+			return err
+		}
+
+		restListen := c.String(restListenFlag.Name)
+		gwServer := &http.Server{
+			Addr:    restListen,
+			Handler: gwmux,
+		}
+
+		log.Infow("REST server starting", "listenAddress", restListen)
+
+		return gwServer.ListenAndServe()
+	})
 
 	// Run circuitbreaker core.
 	group.Go(func() error {

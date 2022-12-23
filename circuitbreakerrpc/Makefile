@@ -19,7 +19,7 @@ protoc-tools:
 	unzip -d /usr/local /tmp/protoc.zip
 
 protoc-buf:
-	curl -sSL  "https://github.com/bufbuild/buf/releases/download/v1.0.0-rc2/buf-$(shell uname -s)-$(shell uname -m).tar.gz" | tar -xvzf - -C /usr/local --strip-components 1
+	curl -sSL  "https://github.com/bufbuild/buf/releases/download/v1.11.0/buf-$(shell uname -s)-$(shell uname -m).tar.gz" | tar -xvzf - -C /usr/local --strip-components 1
 
 protoc-go-tools:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.27.1
@@ -28,4 +28,5 @@ protoc-go-tools:
 	go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.5.0
 
 buf-gen:
+	buf mod update
 	buf generate
