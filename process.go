@@ -2,7 +2,6 @@ package circuitbreaker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -95,16 +94,12 @@ func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits) *proce
 }
 
 type updateLimitEvent struct {
-	limit *Limit
-	peer  *route.Vertex
+	limit Limit
+	peer  route.Vertex
 }
 
-func (p *process) UpdateLimit(ctx context.Context, peer *route.Vertex,
-	limit *Limit) error {
-
-	if peer == nil && limit == nil {
-		return errors.New("cannot clear default limit")
-	}
+func (p *process) UpdateLimit(ctx context.Context, peer route.Vertex,
+	limit Limit) error {
 
 	update := updateLimitEvent{
 		limit: limit,
@@ -191,10 +186,8 @@ func (p *process) getPeerController(ctx context.Context, peer route.Vertex,
 func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 	startGo func(func() error), htlcs map[circuitKey]struct{}) *peerController {
 
-	peerCfg, ok := p.limits.PerPeer[peer]
-	if !ok {
-		peerCfg = p.limits.Default
-	}
+	// Use zero limits if not configured.
+	peerCfg := p.limits.PerPeer[peer]
 
 	alias := p.getNodeAlias(peer)
 
@@ -284,44 +277,14 @@ func (p *process) eventLoop(ctx context.Context) error {
 			}
 
 		case update := <-p.updateLimitChan:
-			switch {
-			case update.peer == nil:
-				p.limits.Default = *update.limit
+			p.limits.PerPeer[update.peer] = update.limit
 
-				// Update all controllers that have no specific limit.
-				for node, ctrl := range p.peerCtrls {
-					_, ok := p.limits.PerPeer[node]
-					if ok {
-						continue
-					}
-
-					err := ctrl.updateLimit(ctx, *update.limit)
-					if err != nil {
-						return err
-					}
-				}
-			case update.limit != nil:
-				p.limits.PerPeer[*update.peer] = *update.limit
-
-				// Update specific controller if it exists.
-				ctrl, ok := p.peerCtrls[*update.peer]
-				if ok {
-					err := ctrl.updateLimit(ctx, *update.limit)
-					if err != nil {
-						return err
-					}
-				}
-
-			case update.limit == nil:
-				delete(p.limits.PerPeer, *update.peer)
-
-				// Apply default limit to peer controller.
-				ctrl, ok := p.peerCtrls[*update.peer]
-				if ok {
-					err := ctrl.updateLimit(ctx, p.limits.Default)
-					if err != nil {
-						return err
-					}
+			// Update specific controller if it exists.
+			ctrl, ok := p.peerCtrls[update.peer]
+			if ok {
+				err := ctrl.updateLimit(ctx, update.limit)
+				if err != nil {
+					return err
 				}
 			}
 

@@ -58,21 +58,6 @@ func main() {
 				maxPendingFlag,
 			},
 		},
-		{
-			Name:   "clearlimit",
-			Action: clearLimit,
-			Flags: []cli.Flag{
-				nodeFlag,
-			},
-		},
-		{
-			Name:   "updatedefaultlimit",
-			Action: updateDefaultLimit,
-			Flags: []cli.Flag{
-				maxHourlyRateFlag,
-				maxPendingFlag,
-			},
-		},
 	}
 
 	if err := app.Run(os.Args); err != nil {

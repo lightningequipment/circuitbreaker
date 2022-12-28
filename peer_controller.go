@@ -75,7 +75,7 @@ type rateCounts struct {
 	success, fail, reject int64
 }
 
-var rateCounterIntervals = []time.Duration{5 * time.Minute, time.Hour, 24 * time.Hour}
+var rateCounterIntervals = []time.Duration{time.Hour, 24 * time.Hour}
 
 const burstSize = 10
 
@@ -285,6 +285,10 @@ func (p *peerController) incrCounter(event eventType) {
 }
 
 func getRate(maxHourlyRate int64) rate.Limit {
+	if maxHourlyRate == 0 {
+		return rate.Inf
+	}
+
 	return rate.Limit(float64(maxHourlyRate) / 3600)
 }
 

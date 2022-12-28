@@ -20,19 +20,6 @@ service Service {
         };
     }
 
-    rpc ClearLimit (ClearLimitRequest) returns (ClearLimitResponse) {
-        option (google.api.http) = {
-            post: "/api/clearlimit/{node}"
-        };
-    }
-
-    rpc UpdateDefaultLimit (UpdateDefaultLimitRequest) returns (UpdateDefaultLimitResponse) {
-        option (google.api.http) = {
-            post: "/api/updatedefaultlimit"
-            body: "*"
-        };
-    }
-
     rpc ListLimits (ListLimitsRequest) returns (ListLimitsResponse) {
         option (google.api.http) = {
             get:"/api/limits"
@@ -46,13 +33,6 @@ message GetInfoResponse {
     string connected_node = 1;
 }
 
-
-message ClearLimitRequest {
-    string node = 1;
-}
-
-message ClearLimitResponse {}
-
 message UpdateLimitRequest {
     string node = 1;
     int64 max_hourly_rate = 2;
@@ -61,30 +41,19 @@ message UpdateLimitRequest {
 
 message UpdateLimitResponse {}
 
-
-message UpdateDefaultLimitRequest {
-    int64 max_hourly_rate = 2;
-	int64 max_pending = 4;
-}
-
-message UpdateDefaultLimitResponse {}
-
 message ListLimitsRequest {}
 
 message ListLimitsResponse {
-    repeated int64 counter_intervals_sec = 1;
-
-    Limit default_limit = 2;
-
-    repeated NodeLimit limits = 3;
+    repeated NodeLimit limits = 5;
 }
 
 message NodeLimit {
     string node = 1;
 
-    Limit limit = 3;
+    Limit limit = 2;
 
-    repeated Counter counters = 6;
+    Counter counter_1h = 3;
+    Counter counter_24h = 4;
 }
 
 message Limit {

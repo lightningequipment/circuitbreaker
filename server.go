@@ -64,60 +64,12 @@ func (s *server) UpdateLimit(ctx context.Context,
 		return nil, err
 	}
 
-	err = s.process.UpdateLimit(ctx, &node, &limit)
+	err = s.process.UpdateLimit(ctx, node, limit)
 	if err != nil {
 		return nil, err
 	}
 
 	return &circuitbreakerrpc.UpdateLimitResponse{}, nil
-}
-
-func (s *server) ClearLimit(ctx context.Context,
-	req *circuitbreakerrpc.ClearLimitRequest) (
-	*circuitbreakerrpc.ClearLimitResponse, error) {
-
-	node, err := route.NewVertexFromStr(req.Node)
-	if err != nil {
-		return nil, err
-	}
-
-	s.log.Infow("Clearing limit", "node", node)
-
-	err = s.db.ClearLimit(ctx, node)
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.process.UpdateLimit(ctx, &node, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return &circuitbreakerrpc.ClearLimitResponse{}, nil
-}
-
-func (s *server) UpdateDefaultLimit(ctx context.Context,
-	req *circuitbreakerrpc.UpdateDefaultLimitRequest) (
-	*circuitbreakerrpc.UpdateDefaultLimitResponse, error) {
-
-	limit := Limit{
-		MaxHourlyRate: req.MaxHourlyRate,
-		MaxPending:    req.MaxPending,
-	}
-
-	s.log.Infow("Updating default limit", "limit", limit)
-
-	err := s.db.UpdateDefaultLimit(ctx, limit)
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.process.UpdateLimit(ctx, nil, &limit)
-	if err != nil {
-		return nil, err
-	}
-
-	return &circuitbreakerrpc.UpdateDefaultLimitResponse{}, nil
 }
 
 func (s *server) ListLimits(ctx context.Context,
@@ -132,6 +84,14 @@ func (s *server) ListLimits(ctx context.Context,
 	counters, err := s.process.getRateCounters(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	marshalCounter := func(count rateCounts) *circuitbreakerrpc.Counter {
+		return &circuitbreakerrpc.Counter{
+			Success: count.success,
+			Fail:    count.fail,
+			Reject:  count.reject,
+		}
 	}
 
 	var rpcLimits = []*circuitbreakerrpc.NodeLimit{}
@@ -151,17 +111,8 @@ func (s *server) ListLimits(ctx context.Context,
 			counts = make([]rateCounts, len(rateCounterIntervals))
 		}
 
-		rpcCounts := make([]*circuitbreakerrpc.Counter, len(counts))
-
-		for idx, count := range counts {
-			rpcCounts[idx] = &circuitbreakerrpc.Counter{
-				Success: count.success,
-				Fail:    count.fail,
-				Reject:  count.reject,
-			}
-		}
-
-		rpcLimit.Counters = rpcCounts
+		rpcLimit.Counter_1H = marshalCounter(counts[0])
+		rpcLimit.Counter_24H = marshalCounter(counts[1])
 
 		delete(counters, peer)
 
@@ -173,32 +124,13 @@ func (s *server) ListLimits(ctx context.Context,
 			Node: hex.EncodeToString(peer[:]),
 		}
 
-		rpcCounts := make([]*circuitbreakerrpc.Counter, len(counts))
-
-		for idx, count := range counts {
-			rpcCounts[idx] = &circuitbreakerrpc.Counter{
-				Success: count.success,
-				Fail:    count.fail,
-				Reject:  count.reject,
-			}
-		}
-
-		rpcLimit.Counters = rpcCounts
+		rpcLimit.Counter_1H = marshalCounter(counts[0])
+		rpcLimit.Counter_24H = marshalCounter(counts[1])
 
 		rpcLimits = append(rpcLimits, rpcLimit)
 	}
 
-	intervals := make([]int64, len(rateCounterIntervals))
-	for idx, interval := range rateCounterIntervals {
-		intervals[idx] = int64(interval.Seconds())
-	}
-
 	return &circuitbreakerrpc.ListLimitsResponse{
-		DefaultLimit: &circuitbreakerrpc.Limit{
-			MaxHourlyRate: limits.Default.MaxHourlyRate,
-			MaxPending:    limits.Default.MaxPending,
-		},
-		CounterIntervalsSec: intervals,
-		Limits:              rpcLimits,
+		Limits: rpcLimits,
 	}, nil
 }

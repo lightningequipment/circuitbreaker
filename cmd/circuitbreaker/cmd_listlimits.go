@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
@@ -25,21 +24,15 @@ func listLimits(c *cli.Context) error {
 		return err
 	}
 
-	printDefaultLimit(resp.DefaultLimit)
-
 	fmt.Println()
 
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 
-	headerRow1 := table.Row{"", "LIMITS", "LIMITS"}
-	headerRow2 := table.Row{"NODE", "MAX HOURLY RATE", "MAX PENDING"}
-	for _, interval := range resp.CounterIntervalsSec {
-		header := fmt.Sprintf("%v", time.Duration(interval)*time.Second)
-		headerRow1 = append(headerRow1, "COUNTERS")
-		headerRow2 = append(headerRow2, header)
-	}
+	headerRow1 := table.Row{"", "LIMITS", "LIMITS", "COUNTERS", "COUNTERS"}
 	t.AppendHeader(headerRow1, table.RowConfig{AutoMerge: true})
+
+	headerRow2 := table.Row{"NODE", "MAX HOURLY RATE", "MAX PENDING", "1 HR", "24 HR"}
 	t.AppendHeader(headerRow2)
 
 	for _, limit := range resp.Limits {
@@ -54,10 +47,14 @@ func listLimits(c *cli.Context) error {
 			}
 		}
 
-		for _, counter := range limit.Counters {
-			counterString := fmt.Sprintf("%v / %v / %v", counter.Success, counter.Fail, counter.Reject)
-			row = append(row, counterString)
+		formatCounter := func(counter *circuitbreakerrpc.Counter) string {
+			return fmt.Sprintf("%v / %v / %v", counter.Success, counter.Fail, counter.Reject)
 		}
+
+		row = append(row,
+			formatCounter(limit.Counter_1H),
+			formatCounter(limit.Counter_24H),
+		)
 
 		t.AppendRow(row)
 	}
@@ -66,19 +63,4 @@ func listLimits(c *cli.Context) error {
 	t.Render()
 
 	return nil
-}
-
-func printDefaultLimit(limit *circuitbreakerrpc.Limit) {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-
-	headerRow := table.Row{"MAX HOURLY RATE", "MAX PENDING"}
-	t.AppendHeader(headerRow)
-
-	t.AppendRow(table.Row{
-		limit.MaxHourlyRate, limit.MaxPending,
-	})
-
-	fmt.Println("DEFAULT LIMITS")
-	t.Render()
 }
