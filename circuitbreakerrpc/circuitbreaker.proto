@@ -49,6 +49,7 @@ message ListLimitsResponse {
 
 message NodeLimit {
     string node = 1;
+    string alias = 5;
 
     Limit limit = 2;
 

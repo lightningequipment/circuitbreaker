@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
@@ -29,23 +30,28 @@ func listLimits(c *cli.Context) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 
-	headerRow1 := table.Row{"", "LIMITS", "LIMITS", "COUNTERS", "COUNTERS"}
+	headerRow1 := table.Row{"", "", "LIMITS", "LIMITS", "COUNTERS", "COUNTERS"}
 	t.AppendHeader(headerRow1, table.RowConfig{AutoMerge: true})
 
-	headerRow2 := table.Row{"NODE", "MAX HOURLY RATE", "MAX PENDING", "1 HR", "24 HR"}
+	headerRow2 := table.Row{"NODE", "ALIAS", "MAX HOURLY RATE", "MAX PENDING", "1 HR", "24 HR"}
 	t.AppendHeader(headerRow2)
 
 	for _, limit := range resp.Limits {
-		var row table.Row
-		if limit.Limit == nil {
-			row = table.Row{
-				limit.Node, "<default>", "<default>",
-			}
-		} else {
-			row = table.Row{
-				limit.Node, limit.Limit.MaxHourlyRate, limit.Limit.MaxPending,
-			}
+		row := table.Row{
+			limit.Node, limit.Alias,
 		}
+
+		appendNumber := func(number int64) {
+			val := "-"
+			if number != 0 {
+				val = strconv.FormatInt(number, 10)
+			}
+
+			row = append(row, val)
+		}
+
+		appendNumber(limit.Limit.MaxHourlyRate)
+		appendNumber(limit.Limit.MaxPending)
 
 		formatCounter := func(counter *circuitbreakerrpc.Counter) string {
 			return fmt.Sprintf("%v / %v / %v", counter.Success, counter.Fail, counter.Reject)

@@ -189,10 +189,7 @@ func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 	// Use zero limits if not configured.
 	peerCfg := p.limits.PerPeer[peer]
 
-	alias := p.getNodeAlias(peer)
-
 	logger := p.log.With(
-		"peer_alias", alias,
 		"peer", peer.String(),
 	)
 

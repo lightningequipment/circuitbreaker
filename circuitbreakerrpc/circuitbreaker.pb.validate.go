@@ -463,6 +463,8 @@ func (m *NodeLimit) Validate() error {
 
 	// no validation rules for Node
 
+	// no validation rules for Alias
+
 	if v, ok := interface{}(m.GetLimit()).(interface{ Validate() error }); ok {
 		if err := v.Validate(); err != nil {
 			return NodeLimitValidationError{

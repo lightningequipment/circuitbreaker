@@ -12,7 +12,9 @@ import (
 	"github.com/lightningnetwork/lnd/routing/route"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 	"gopkg.in/macaroon.v2"
 )
 
@@ -20,6 +22,8 @@ var (
 	// maxMsgRecvSize is the largest message our client will receive. We
 	// set this to 200MiB atm.
 	maxMsgRecvSize = grpc.MaxCallRecvMsgSize(1 * 1024 * 1024 * 200)
+
+	ErrNodeNotFound = errors.New("node info not available")
 )
 
 type lndclientGrpc struct {
@@ -152,12 +156,15 @@ func (l *lndclientGrpc) getNodeAlias(key route.Vertex) (string, error) {
 	info, err := l.main.GetNodeInfo(ctx, &lnrpc.NodeInfoRequest{
 		PubKey: key.String(),
 	})
-	if err != nil {
-		return "", err
-	}
+	switch {
+	case status.Code(err) == codes.NotFound:
+		return "", ErrNodeNotFound
 
-	if info.Node == nil {
-		return "", errors.New("node info not available")
+	case info.Node == nil:
+		return "", ErrNodeNotFound
+
+	case err != nil:
+		return "", err
 	}
 
 	return info.Node.Alias, nil
