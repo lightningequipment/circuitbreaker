@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -30,10 +31,10 @@ func listLimits(c *cli.Context) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 
-	headerRow1 := table.Row{"", "", "LIMITS", "LIMITS", "COUNTERS", "COUNTERS"}
+	headerRow1 := table.Row{"", "", "LIMITS", "LIMITS", "LIMITS", "COUNTERS", "COUNTERS"}
 	t.AppendHeader(headerRow1, table.RowConfig{AutoMerge: true})
 
-	headerRow2 := table.Row{"NODE", "ALIAS", "MAX HOURLY RATE", "MAX PENDING", "1 HR", "24 HR"}
+	headerRow2 := table.Row{"NODE", "ALIAS", "MAX HOURLY RATE", "MAX PENDING", "MODE", "1 HR", "24 HR"}
 	t.AppendHeader(headerRow2)
 
 	for _, limit := range resp.Limits {
@@ -52,6 +53,23 @@ func listLimits(c *cli.Context) error {
 
 		appendNumber(limit.Limit.MaxHourlyRate)
 		appendNumber(limit.Limit.MaxPending)
+
+		var modeStr string
+		switch limit.Limit.Mode {
+		case circuitbreakerrpc.Mode_MODE_FAIL:
+			modeStr = modeFail
+
+		case circuitbreakerrpc.Mode_MODE_QUEUE:
+			modeStr = modeQueue
+
+		case circuitbreakerrpc.Mode_MODE_QUEUE_PEER_INITIATED:
+			modeStr = modeQueuePeerInitiated
+
+		default:
+			return errors.New("unknown mode")
+		}
+
+		row = append(row, modeStr)
 
 		formatCounter := func(counter *circuitbreakerrpc.Counter) string {
 			return fmt.Sprintf("%v / %v / %v", counter.Success, counter.Fail, counter.Reject)

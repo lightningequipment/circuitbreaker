@@ -175,9 +175,15 @@ func (m *UpdateLimitRequest) Validate() error {
 
 	// no validation rules for Node
 
-	// no validation rules for MaxHourlyRate
-
-	// no validation rules for MaxPending
+	if v, ok := interface{}(m.GetLimit()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return UpdateLimitRequestValidationError{
+				field:  "Limit",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
 
 	return nil
 }
@@ -562,6 +568,8 @@ func (m *Limit) Validate() error {
 	// no validation rules for MaxHourlyRate
 
 	// no validation rules for MaxPending
+
+	// no validation rules for Mode
 
 	return nil
 }

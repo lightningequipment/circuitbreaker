@@ -11,13 +11,13 @@ const (
 func (m Mode) String() string {
 	switch m {
 	case ModeFail:
-		return "fail"
+		return "FAIL"
 
 	case ModeQueue:
-		return "queue"
+		return "QUEUE"
 
 	case ModeQueuePeerInitiated:
-		return "queue_peer_initiated"
+		return "QUEUE_PEER_INITIATED"
 
 	default:
 		panic("unknown mode")

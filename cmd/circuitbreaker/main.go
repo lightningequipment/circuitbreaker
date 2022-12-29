@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
 	"github.com/lightningnetwork/lnd/build"
@@ -15,6 +16,30 @@ import (
 var (
 	defaultRPCHostPort = "localhost:9234"
 )
+
+type EnumValue struct {
+	Enum     []string
+	Default  string
+	selected string
+}
+
+func (e *EnumValue) Set(value string) error {
+	for _, enum := range e.Enum {
+		if enum == value {
+			e.selected = value
+			return nil
+		}
+	}
+
+	return fmt.Errorf("allowed values are %s", strings.Join(e.Enum, ", "))
+}
+
+func (e EnumValue) String() string {
+	if e.selected == "" {
+		return e.Default
+	}
+	return e.selected
+}
 
 var (
 	nodeFlag = cli.StringFlag{
@@ -30,6 +55,19 @@ var (
 	maxPendingFlag = cli.Int64Flag{
 		Name:     "max_pending",
 		Required: true,
+	}
+
+	modeFail               = "fail"
+	modeQueue              = "queue"
+	modeQueuePeerInitiated = "queue_peer_initiated"
+
+	modeFlag = cli.GenericFlag{
+		Name: "mode",
+		Value: &EnumValue{
+			Enum:    []string{modeFail, modeQueue, modeQueuePeerInitiated},
+			Default: modeFail,
+		},
+		Usage: strings.Join([]string{modeFail, modeQueue, modeQueuePeerInitiated}, " / "),
 	}
 )
 
@@ -56,6 +94,7 @@ func main() {
 				nodeFlag,
 				maxHourlyRateFlag,
 				maxPendingFlag,
+				modeFlag,
 			},
 		},
 	}

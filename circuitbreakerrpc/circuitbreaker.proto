@@ -33,10 +33,15 @@ message GetInfoResponse {
     string connected_node = 1;
 }
 
+enum Mode {
+    MODE_FAIL = 0;
+    MODE_QUEUE = 1;
+    MODE_QUEUE_PEER_INITIATED = 2;
+}
+
 message UpdateLimitRequest {
     string node = 1;
-    int64 max_hourly_rate = 2;
-	int64 max_pending = 4;
+    Limit limit = 2;
 }
 
 message UpdateLimitResponse {}
@@ -60,6 +65,7 @@ message NodeLimit {
 message Limit {
     int64 max_hourly_rate = 3;
 	int64 max_pending = 5;
+    Mode mode = 6;
 }
 
 message Counter {

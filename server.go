@@ -3,6 +3,7 @@ package circuitbreaker
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"sync"
 
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
@@ -80,8 +81,22 @@ func (s *server) UpdateLimit(ctx context.Context,
 	}
 
 	limit := Limit{
-		MaxHourlyRate: req.MaxHourlyRate,
-		MaxPending:    req.MaxPending,
+		MaxHourlyRate: req.Limit.MaxHourlyRate,
+		MaxPending:    req.Limit.MaxPending,
+	}
+
+	switch req.Limit.Mode {
+	case circuitbreakerrpc.Mode_MODE_FAIL:
+		limit.Mode = ModeFail
+
+	case circuitbreakerrpc.Mode_MODE_QUEUE:
+		limit.Mode = ModeQueue
+
+	case circuitbreakerrpc.Mode_MODE_QUEUE_PEER_INITIATED:
+		limit.Mode = ModeQueuePeerInitiated
+
+	default:
+		return nil, errors.New("unknown mode")
 	}
 
 	s.log.Infow("Updating limit", "node", node, "limit", limit)
@@ -154,6 +169,20 @@ func (s *server) ListLimits(ctx context.Context,
 
 		rpcLimit.Limit.MaxHourlyRate = limit.MaxHourlyRate
 		rpcLimit.Limit.MaxPending = limit.MaxPending
+
+		switch limit.Mode {
+		case ModeFail:
+			rpcLimit.Limit.Mode = circuitbreakerrpc.Mode_MODE_FAIL
+
+		case ModeQueue:
+			rpcLimit.Limit.Mode = circuitbreakerrpc.Mode_MODE_QUEUE
+
+		case ModeQueuePeerInitiated:
+			rpcLimit.Limit.Mode = circuitbreakerrpc.Mode_MODE_QUEUE_PEER_INITIATED
+
+		default:
+			return nil, errors.New("unknown mode")
+		}
 
 		delete(counters, peer)
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 
 	"github.com/lightningnetwork/lnd/routing/route"
 	_ "modernc.org/sqlite"
@@ -62,11 +63,12 @@ func (d *Db) UpdateLimit(ctx context.Context, peer route.Vertex,
 		return err
 	}
 
-	const replace string = `REPLACE INTO limits(peer, htlc_max_pending, htlc_max_hourly_rate) VALUES(?, ?, ?);`
+	const replace string = `REPLACE INTO limits(peer, htlc_max_pending, htlc_max_hourly_rate, mode) VALUES(?, ?, ?, ?);`
 
 	_, err := d.db.ExecContext(
 		ctx, replace, peerHex,
 		limit.MaxPending, limit.MaxHourlyRate,
+		limit.Mode.String(),
 	)
 
 	return err
@@ -74,7 +76,7 @@ func (d *Db) UpdateLimit(ctx context.Context, peer route.Vertex,
 
 func (d *Db) GetLimits(ctx context.Context) (*Limits, error) {
 	const query string = `
-	SELECT peer, htlc_max_pending, htlc_max_hourly_rate from limits;`
+	SELECT peer, htlc_max_pending, htlc_max_hourly_rate, mode from limits;`
 
 	rows, err := d.db.QueryContext(ctx, query)
 	if err != nil {
@@ -88,12 +90,27 @@ func (d *Db) GetLimits(ctx context.Context) (*Limits, error) {
 		var (
 			limit   Limit
 			peerHex string
+			modeStr string
 		)
 		err := rows.Scan(
-			&peerHex, &limit.MaxPending, &limit.MaxHourlyRate,
+			&peerHex, &limit.MaxPending, &limit.MaxHourlyRate, &modeStr,
 		)
 		if err != nil {
 			return nil, err
+		}
+
+		switch modeStr {
+		case "FAIL":
+			limit.Mode = ModeFail
+
+		case "QUEUE":
+			limit.Mode = ModeQueue
+
+		case "QUEUE_PEER_INITIATED":
+			limit.Mode = ModeQueuePeerInitiated
+
+		default:
+			return nil, errors.New("unknown mode")
 		}
 
 		key, err := route.NewVertexFromStr(peerHex)
