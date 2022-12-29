@@ -2,11 +2,10 @@ import React, {useState, useEffect, useRef } from 'react';
 import logo from './logo.svg';
 import './App.css';
 import { DataTable } from 'primereact/datatable';
-import { Panel } from 'primereact/panel';
+import { Card } from 'primereact/card';
 import { Column } from 'primereact/column';
 import { ColumnGroup } from 'primereact/columngroup';
 import { InputNumber } from 'primereact/inputnumber';
-import { Button } from 'primereact/button';
 import { Row } from 'primereact/row';
 import { Tooltip } from 'primereact/tooltip';
 import { Dropdown } from 'primereact/dropdown';
@@ -171,7 +170,7 @@ function App() {
   }
 
   return (
-    <Panel header="Limits">
+    <Card title="Circuit Breaker">
     <Tooltip ref={tooltipRef} target=".custom-tooltip"></Tooltip>
     <DataTable value={data} responsiveLayout="scroll" sortField="node" sortOrder={1} headerColumnGroup={headerGroup}  editMode="row" onRowEditComplete={onRowEditComplete} >
       <Column field="node" body={bodyTemplate}></Column>
@@ -187,7 +186,7 @@ function App() {
 
       <Column rowEditor></Column>
     </DataTable>
-    </Panel>
+    </Card>
 
 
   );
