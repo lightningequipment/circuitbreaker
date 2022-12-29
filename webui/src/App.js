@@ -9,6 +9,8 @@ import { InputNumber } from 'primereact/inputnumber';
 import { Button } from 'primereact/button';
 import { Row } from 'primereact/row';
 import { Tooltip } from 'primereact/tooltip';
+import { Dropdown } from 'primereact/dropdown';
+
 
 import "primereact/resources/themes/lara-light-indigo/theme.css";  //theme
 import "primereact/resources/primereact.min.css";                  //core css
@@ -41,6 +43,7 @@ function App() {
 
           maxPending: l.limit.maxPending,
           maxHourlyRate: l.limit.maxHourlyRate,
+          mode: l.limit.mode,
         };
 
         if (l.alias == "") {
@@ -75,7 +78,7 @@ function App() {
                             <Column header="Last 1 hr" colSpan={3}/>
                             <Column header="Last 24 hr" colSpan={3}/>
 
-                            <Column header="Limits" colSpan={3}/>
+                            <Column header="Limits" colSpan={4}/>
                         </Row>
                         <Row>
                             <Column header="OK" field="counter1h_success" sortable />
@@ -85,8 +88,9 @@ function App() {
                             <Column header="Fail" field="counter24h_fail" sortable />
                             <Column header="Rej" field="counter24h_reject" sortable />
 
-                            <Column header="Max Hourly Rate" field="limit.maxHourlyRate" sortable />
-                            <Column header="Max Pending" field="limit.maxPending" sortable />
+                            <Column header="Max Hourly Rate" field="maxHourlyRate" sortable />
+                            <Column header="Max Pending" field="maxPending" sortable />
+                            <Column header="Mode" field="mode" sortable />
                             <Column />
                         </Row>
                     </ColumnGroup>;
@@ -105,7 +109,12 @@ function App() {
     const requestOptions = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ maxHourlyRate: newData.maxHourlyRate, maxPending: newData.maxPending })
+      body: JSON.stringify({
+        limit: { 
+          maxHourlyRate: newData.maxHourlyRate, 
+          maxPending: newData.maxPending,
+          mode: newData.mode
+         }})
     };
 
     fetch('/api/updatelimit/'+newData.node, requestOptions)
@@ -115,6 +124,50 @@ function App() {
         console.log(data)
       });
 
+  }
+
+  const modes = [
+    { label: 'Fail', value: 'MODE_FAIL' },
+    { label: 'Queue', value: 'MODE_QUEUE' },
+    { label: 'Queue peer initiated', value: 'MODE_QUEUE_PEER_INITIATED' }
+];
+
+  const modeEditor = (options) => {
+    return (
+        <Dropdown value={options.value} options={modes} optionLabel="label" optionValue="value"
+            onChange={(e) => options.editorCallback(e.value)} placeholder="Select a Mode"
+            itemTemplate={(option) => {
+                return <span className={`product-badge status-${option.value.toLowerCase()}`}>{option.label}</span>
+            }} />
+    );
+  }
+
+  const modeBodyTemplate = (rowData) => {
+    if (rowData.maxHourlyRate == 0 && rowData.maxPending == 0) {
+      return '-';
+    }
+
+    switch (rowData.mode) {
+      case 'MODE_FAIL':
+          return 'Fail';
+
+      case 'MODE_QUEUE':
+          return 'Queue';
+
+      case 'MODE_QUEUE_PEER_INITIATED':
+          return 'Queue peer initiated';
+
+      default:
+          return 'NA';
+    }
+  }
+
+  const numberBodyTemplate = (number) => {
+    if (number == 0) {
+      return "-"
+    }
+    
+    return number
   }
 
   return (
@@ -128,8 +181,9 @@ function App() {
       <Column field="counter24h_success"></Column>
       <Column field="counter24h_fail"></Column>
       <Column field="counter24h_reject"></Column>
-      <Column field="maxHourlyRate" editor={(options) => textEditor(options)}></Column>
-      <Column field="maxPending" editor={(options) => textEditor(options)}></Column>
+      <Column field="maxHourlyRate" body={(rowData => numberBodyTemplate(rowData.maxHourlyRate))} editor={(options) => textEditor(options)}></Column>
+      <Column field="maxPending" body={(rowData => numberBodyTemplate(rowData.maxPending))} editor={(options) => textEditor(options)}></Column>
+      <Column field="mode" body={modeBodyTemplate} editor={(options) => modeEditor(options)}></Column>
 
       <Column rowEditor></Column>
     </DataTable>

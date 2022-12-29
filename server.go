@@ -80,6 +80,10 @@ func (s *server) UpdateLimit(ctx context.Context,
 		return nil, err
 	}
 
+	if req.Limit == nil {
+		return nil, errors.New("no limit specified")
+	}
+
 	limit := Limit{
 		MaxHourlyRate: req.Limit.MaxHourlyRate,
 		MaxPending:    req.Limit.MaxPending,
