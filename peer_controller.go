@@ -87,9 +87,8 @@ func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 
 	logger.Infow("Peer controller initialized",
 		"maxHourlyRate", cfg.MaxHourlyRate,
-		"maxPendingHtlcs", cfg.MaxPending)
-
-	// "mode", cfg.Mode)
+		"maxPendingHtlcs", cfg.MaxPending,
+		"mode", cfg.Mode)
 
 	// Log initial pending htlcs.
 	for h := range htlcs {
@@ -175,8 +174,7 @@ func (p *peerController) run(ctx context.Context) error {
 				continue
 			}
 
-			//mode := p.cfg.Mode
-			mode := ModeFail
+			mode := p.cfg.Mode
 			if mode == ModeQueue ||
 				(mode == ModeQueuePeerInitiated && event.peerInitiated) {
 

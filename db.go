@@ -3,6 +3,7 @@ package circuitbreaker
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 
 	"github.com/lightningnetwork/lnd/routing/route"
 	_ "modernc.org/sqlite"
@@ -18,6 +19,19 @@ func NewDb(ctx context.Context) (*Db, error) {
 		return nil, err
 	}
 
+	const initQuery string = `
+	CREATE TABLE IF NOT EXISTS limits (
+		peer TEXT PRIMARY KEY NOT NULL,
+		htlc_max_pending INTEGER NOT NULL,
+		htlc_max_hourly_rate INTEGER NOT NULL,
+		mode TEXT CHECK(mode IN ('FAIL', 'QUEUE', 'QUEUE_PEER_INITIATED')) NOT NULL DEFAULT 'FAIL'
+	);
+	`
+
+	if _, err := db.ExecContext(ctx, initQuery); err != nil {
+		return nil, err
+	}
+
 	return &Db{
 		db: db,
 	}, nil
@@ -26,6 +40,7 @@ func NewDb(ctx context.Context) (*Db, error) {
 type Limit struct {
 	MaxHourlyRate int64
 	MaxPending    int64
+	Mode          Mode
 }
 
 type Limits struct {
@@ -35,20 +50,22 @@ type Limits struct {
 func (d *Db) UpdateLimit(ctx context.Context, peer route.Vertex,
 	limit Limit) error {
 
+	peerHex := hex.EncodeToString(peer[:])
+
 	if limit.MaxHourlyRate == 0 && limit.MaxPending == 0 {
-		const delete string = `DELETE FROM limits WHERE node_in=?;`
+		const delete string = `DELETE FROM limits WHERE peer=?;`
 
 		_, err := d.db.ExecContext(
-			ctx, delete, peer[:],
+			ctx, delete, peerHex,
 		)
 
 		return err
 	}
 
-	const replace string = `REPLACE INTO limits(node_in, htlc_max_pending, htlc_max_hourly_rate) VALUES(?, ?, ?);`
+	const replace string = `REPLACE INTO limits(peer, htlc_max_pending, htlc_max_hourly_rate) VALUES(?, ?, ?);`
 
 	_, err := d.db.ExecContext(
-		ctx, replace, peer[:],
+		ctx, replace, peerHex,
 		limit.MaxPending, limit.MaxHourlyRate,
 	)
 
@@ -57,7 +74,7 @@ func (d *Db) UpdateLimit(ctx context.Context, peer route.Vertex,
 
 func (d *Db) GetLimits(ctx context.Context) (*Limits, error) {
 	const query string = `
-	SELECT node_in, htlc_max_pending, htlc_max_hourly_rate from limits;`
+	SELECT peer, htlc_max_pending, htlc_max_hourly_rate from limits;`
 
 	rows, err := d.db.QueryContext(ctx, query)
 	if err != nil {
@@ -69,17 +86,17 @@ func (d *Db) GetLimits(ctx context.Context) (*Limits, error) {
 	}
 	for rows.Next() {
 		var (
-			limit  Limit
-			nodeIn []byte
+			limit   Limit
+			peerHex string
 		)
 		err := rows.Scan(
-			&nodeIn, &limit.MaxPending, &limit.MaxHourlyRate,
+			&peerHex, &limit.MaxPending, &limit.MaxHourlyRate,
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		key, err := route.NewVertexFromBytes(nodeIn)
+		key, err := route.NewVertexFromStr(peerHex)
 		if err != nil {
 			return nil, err
 		}
