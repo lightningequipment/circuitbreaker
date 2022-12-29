@@ -51,7 +51,7 @@ type resolvedEvent struct {
 }
 
 type rateCounters struct {
-	counters map[route.Vertex][]rateCounts
+	counters map[route.Vertex]*peerState
 }
 
 type rateCountersRequest struct {
@@ -286,11 +286,14 @@ func (p *process) eventLoop(ctx context.Context) error {
 			}
 
 		case req := <-p.rateCountersRequestChan:
-			allCounts := make(map[route.Vertex][]rateCounts)
+			allCounts := make(map[route.Vertex]*peerState)
 			for node, ctrl := range p.peerCtrls {
-				counts := ctrl.rate()
+				state, err := ctrl.state(ctx)
+				if err != nil {
+					return err
+				}
 
-				allCounts[node] = counts
+				allCounts[node] = state
 			}
 
 			req.counters <- &rateCounters{
@@ -304,7 +307,7 @@ func (p *process) eventLoop(ctx context.Context) error {
 }
 
 func (p *process) getRateCounters(ctx context.Context) (
-	map[route.Vertex][]rateCounts, error) {
+	map[route.Vertex]*peerState, error) {
 
 	replyChan := make(chan *rateCounters)
 

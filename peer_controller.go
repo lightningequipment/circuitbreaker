@@ -59,6 +59,7 @@ type peerController struct {
 	interceptChan   chan peerInterceptEvent
 	resolvedChan    chan resolvedEvent
 	updateLimitChan chan Limit
+	getStateChan    chan chan *peerState
 
 	rateCounters []*eventCounter
 
@@ -69,6 +70,11 @@ type peerInterceptEvent struct {
 	interceptEvent
 
 	peerInitiated bool
+}
+
+type peerState struct {
+	counts   []rateCounts
+	queueLen int64
 }
 
 type rateCounts struct {
@@ -107,12 +113,30 @@ func newPeerController(logger *zap.SugaredLogger, cfg Limit,
 		interceptChan:   make(chan peerInterceptEvent),
 		resolvedChan:    make(chan resolvedEvent),
 		updateLimitChan: make(chan Limit),
+		getStateChan:    make(chan chan *peerState),
 		htlcs:           htlcs,
 		rateCounters:    rateCounters,
 	}
 }
 
-func (p *peerController) rate() []rateCounts {
+func (p *peerController) state(ctx context.Context) (*peerState, error) {
+	respChan := make(chan *peerState)
+	select {
+	case p.getStateChan <- respChan:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	select {
+	case state := <-respChan:
+		return state, nil
+
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (p *peerController) rateInternal() []rateCounts {
 	allRateCounts := make([]rateCounts, len(p.rateCounters))
 	for idx, counter := range p.rateCounters {
 		success, fail, reject := counter.Rates()
@@ -269,6 +293,19 @@ func (p *peerController) run(ctx context.Context) error {
 			p.cfg = limit
 
 			p.limiter.SetLimit(getRate(limit.MaxHourlyRate))
+
+		case respChan := <-p.getStateChan:
+			counts := p.rateInternal()
+
+			select {
+			case respChan <- &peerState{
+				counts:   counts,
+				queueLen: int64(queue.Len()),
+			}:
+
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 
 		case <-ctx.Done():
 			return ctx.Err()

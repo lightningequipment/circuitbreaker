@@ -60,6 +60,7 @@ message NodeLimit {
 
     Counter counter_1h = 3;
     Counter counter_24h = 4;
+    int64 queue_len = 6;
 }
 
 message Limit {

@@ -142,7 +142,7 @@ func (s *server) ListLimits(ctx context.Context,
 
 	var rpcLimits = []*circuitbreakerrpc.NodeLimit{}
 
-	createRpcLimit := func(peer route.Vertex, counts []rateCounts) (
+	createRpcState := func(peer route.Vertex, state *peerState) (
 		*circuitbreakerrpc.NodeLimit, error) {
 
 		alias, err := s.getAlias(peer)
@@ -153,9 +153,10 @@ func (s *server) ListLimits(ctx context.Context,
 		return &circuitbreakerrpc.NodeLimit{
 			Node:        hex.EncodeToString(peer[:]),
 			Alias:       alias,
-			Counter_1H:  marshalCounter(counts[0]),
-			Counter_24H: marshalCounter(counts[1]),
+			Counter_1H:  marshalCounter(state.counts[0]),
+			Counter_24H: marshalCounter(state.counts[1]),
 			Limit:       &circuitbreakerrpc.Limit{},
+			QueueLen:    int64(state.queueLen),
 		}, nil
 	}
 
@@ -163,10 +164,12 @@ func (s *server) ListLimits(ctx context.Context,
 		counts, ok := counters[peer]
 		if !ok {
 			// Report all zeroes.
-			counts = make([]rateCounts, len(rateCounterIntervals))
+			counts = &peerState{
+				counts: make([]rateCounts, len(rateCounterIntervals)),
+			}
 		}
 
-		rpcLimit, err := createRpcLimit(peer, counts)
+		rpcLimit, err := createRpcState(peer, counts)
 		if err != nil {
 			return nil, err
 		}
@@ -194,7 +197,7 @@ func (s *server) ListLimits(ctx context.Context,
 	}
 
 	for peer, counts := range counters {
-		rpcLimit, err := createRpcLimit(peer, counts)
+		rpcLimit, err := createRpcState(peer, counts)
 		if err != nil {
 			return nil, err
 		}

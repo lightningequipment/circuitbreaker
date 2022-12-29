@@ -501,6 +501,8 @@ func (m *NodeLimit) Validate() error {
 		}
 	}
 
+	// no validation rules for QueueLen
+
 	return nil
 }
 

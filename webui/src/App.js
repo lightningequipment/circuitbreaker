@@ -40,6 +40,8 @@ function App() {
           counter24h_fail: l.counter24h.fail,
           counter24h_reject: l.counter24h.reject,
 
+          queueLen: l.queueLen,
+
           maxPending: l.limit.maxPending,
           maxHourlyRate: l.limit.maxHourlyRate,
           mode: l.limit.mode,
@@ -86,6 +88,7 @@ function App() {
                             <Column header="OK" field="counter24h_success" sortable />
                             <Column header="Fail" field="counter24h_fail" sortable />
                             <Column header="Rej" field="counter24h_reject" sortable />
+
 
                             <Column header="Max Hourly Rate" field="maxHourlyRate" sortable />
                             <Column header="Max Pending" field="maxPending" sortable />
@@ -146,15 +149,23 @@ function App() {
       return '-';
     }
 
+    const appendQueued = (str) => {
+      if (rowData.queueLen > 0) {
+        str = str + ' ('+rowData.queueLen+' queued)'
+      }
+
+      return str
+    }
+
     switch (rowData.mode) {
       case 'MODE_FAIL':
           return 'Fail';
 
       case 'MODE_QUEUE':
-          return 'Queue';
+          return appendQueued('Queue')
 
       case 'MODE_QUEUE_PEER_INITIATED':
-          return 'Queue peer initiated';
+        return appendQueued('Queue peer initiated')
 
       default:
           return 'NA';
