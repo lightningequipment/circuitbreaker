@@ -92,13 +92,18 @@ func run(c *cli.Context) error {
 			return err
 		}
 
+		fs := http.FileServer(http.Dir("webui/build/"))
+		mux := http.NewServeMux()
+		mux.Handle("/api/", http.StripPrefix("/api", gwmux))
+		mux.HandleFunc("/", fs.ServeHTTP)
+
 		restListen := c.String(restListenFlag.Name)
 		gwServer := &http.Server{
 			Addr:    restListen,
-			Handler: gwmux,
+			Handler: mux,
 		}
 
-		log.Infow("REST server starting", "listenAddress", restListen)
+		log.Infow("HTTP server starting", "listenAddress", restListen)
 
 		return gwServer.ListenAndServe()
 	})

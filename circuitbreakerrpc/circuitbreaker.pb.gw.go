@@ -147,7 +147,7 @@ func RegisterServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux, se
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/circuitbreaker.Service/GetInfo", runtime.WithHTTPPathPattern("/api/info"))
+		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/circuitbreaker.Service/GetInfo", runtime.WithHTTPPathPattern("/info"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -170,7 +170,7 @@ func RegisterServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux, se
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/circuitbreaker.Service/UpdateLimit", runtime.WithHTTPPathPattern("/api/updatelimit/{node}"))
+		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/circuitbreaker.Service/UpdateLimit", runtime.WithHTTPPathPattern("/updatelimit/{node}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -193,7 +193,7 @@ func RegisterServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux, se
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/circuitbreaker.Service/ListLimits", runtime.WithHTTPPathPattern("/api/limits"))
+		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/circuitbreaker.Service/ListLimits", runtime.WithHTTPPathPattern("/limits"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -255,7 +255,7 @@ func RegisterServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux, cl
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/circuitbreaker.Service/GetInfo", runtime.WithHTTPPathPattern("/api/info"))
+		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/circuitbreaker.Service/GetInfo", runtime.WithHTTPPathPattern("/info"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -275,7 +275,7 @@ func RegisterServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux, cl
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/circuitbreaker.Service/UpdateLimit", runtime.WithHTTPPathPattern("/api/updatelimit/{node}"))
+		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/circuitbreaker.Service/UpdateLimit", runtime.WithHTTPPathPattern("/updatelimit/{node}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -295,7 +295,7 @@ func RegisterServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux, cl
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/circuitbreaker.Service/ListLimits", runtime.WithHTTPPathPattern("/api/limits"))
+		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/circuitbreaker.Service/ListLimits", runtime.WithHTTPPathPattern("/limits"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -315,11 +315,11 @@ func RegisterServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux, cl
 }
 
 var (
-	pattern_Service_GetInfo_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"api", "info"}, ""))
+	pattern_Service_GetInfo_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0}, []string{"info"}, ""))
 
-	pattern_Service_UpdateLimit_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"api", "updatelimit", "node"}, ""))
+	pattern_Service_UpdateLimit_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 1, 0, 4, 1, 5, 1}, []string{"updatelimit", "node"}, ""))
 
-	pattern_Service_ListLimits_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"api", "limits"}, ""))
+	pattern_Service_ListLimits_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0}, []string{"limits"}, ""))
 )
 
 var (

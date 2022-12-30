@@ -9,20 +9,20 @@ option go_package = "github.com/lightningequipment/circuitbreaker/circuitbreaker
 service Service {
     rpc GetInfo (GetInfoRequest) returns (GetInfoResponse) {
         option (google.api.http) = {
-            get:"/api/info"
+            get:"/info"
         };
     }
 
     rpc UpdateLimit (UpdateLimitRequest) returns (UpdateLimitResponse) {
         option (google.api.http) = {
-            post: "/api/updatelimit/{node}"
+            post: "/updatelimit/{node}"
             body: "*"
         };
     }
 
     rpc ListLimits (ListLimitsRequest) returns (ListLimitsResponse) {
         option (google.api.http) = {
-            get:"/api/limits"
+            get:"/limits"
         };        
     }
 }
