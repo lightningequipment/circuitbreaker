@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/paulbellamy/ratecounter"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -64,6 +65,10 @@ type peerController struct {
 	rateCounters []*eventCounter
 
 	htlcs map[circuitKey]struct{}
+
+	lastChannelSync time.Time
+	pubKey          route.Vertex
+	lnd             lndclient
 }
 
 type peerInterceptEvent struct {
@@ -83,19 +88,30 @@ type rateCounts struct {
 
 var rateCounterIntervals = []time.Duration{time.Hour, 24 * time.Hour}
 
-func newPeerController(logger *zap.SugaredLogger, cfg Limit, burstSize int,
-	htlcs map[circuitKey]struct{}) *peerController {
+type peerControllerCfg struct {
+	logger    *zap.SugaredLogger
+	limit     Limit
+	burstSize int
+	htlcs     map[circuitKey]struct{}
+	lnd       lndclient
+	pubKey    route.Vertex
+}
+
+func newPeerController(cfg *peerControllerCfg) *peerController {
+	logger := cfg.logger.With(
+		"peer", cfg.pubKey.String(),
+	)
 
 	// Skip if no interval set.
-	limiter := rate.NewLimiter(getRate(cfg.MaxHourlyRate), burstSize)
+	limiter := rate.NewLimiter(getRate(cfg.limit.MaxHourlyRate), cfg.burstSize)
 
 	logger.Infow("Peer controller initialized",
-		"maxHourlyRate", cfg.MaxHourlyRate,
-		"maxPendingHtlcs", cfg.MaxPending,
-		"mode", cfg.Mode)
+		"maxHourlyRate", cfg.limit.MaxHourlyRate,
+		"maxPendingHtlcs", cfg.limit.MaxPending,
+		"mode", cfg.limit.Mode)
 
 	// Log initial pending htlcs.
-	for h := range htlcs {
+	for h := range cfg.htlcs {
 		logger.Infow("Initial pending htlc", "channel", h.channel, "htlc", h.htlc)
 	}
 
@@ -105,15 +121,18 @@ func newPeerController(logger *zap.SugaredLogger, cfg Limit, burstSize int,
 	}
 
 	return &peerController{
-		cfg:             cfg,
+		cfg:             cfg.limit,
 		limiter:         limiter,
 		logger:          logger,
 		interceptChan:   make(chan peerInterceptEvent),
 		resolvedChan:    make(chan resolvedEvent),
 		updateLimitChan: make(chan Limit),
 		getStateChan:    make(chan chan *peerState),
-		htlcs:           htlcs,
+		htlcs:           cfg.htlcs,
 		rateCounters:    rateCounters,
+		lnd:             cfg.lnd,
+		pubKey:          cfg.pubKey,
+		lastChannelSync: time.Now(),
 	}
 }
 
@@ -158,6 +177,41 @@ func (p *peerController) updateLimit(ctx context.Context, limit Limit) error {
 	}
 }
 
+func (p *peerController) newHtlcAllowed() bool {
+	return p.cfg.MaxPending == 0 ||
+		len(p.htlcs) < int(p.cfg.MaxPending)
+}
+
+func (p *peerController) syncPendingHtlcs(ctx context.Context) (bool, error) {
+	p.logger.Infow("Syncing pending htlcs")
+
+	htlcs, err := p.lnd.getPendingIncomingHtlcs(ctx, &p.pubKey)
+	if err != nil {
+		return false, err
+	}
+
+	p.lastChannelSync = time.Now()
+
+	deletes := false
+	for key := range p.htlcs {
+		_, ok := htlcs[key]
+		if ok {
+			continue
+		}
+
+		// Htlc is no longer pending on incoming side. Must have missed
+		// an htlc event. Clear it from our list.
+		delete(p.htlcs, key)
+
+		logger := p.keyLogger(key)
+		logger.Infow("Cleaning up dangling htlc")
+
+		deletes = true
+	}
+
+	return deletes, nil
+}
+
 func (p *peerController) run(ctx context.Context) error {
 	queue := list.New()
 
@@ -166,8 +220,23 @@ func (p *peerController) run(ctx context.Context) error {
 	for {
 		// New htlcs are allowed when the number of pending htlcs is below the
 		// limit, or no limit has been set.
-		newHtlcAllowed := p.cfg.MaxPending == 0 ||
-			len(p.htlcs) < int(p.cfg.MaxPending)
+		newHtlcAllowed := p.newHtlcAllowed()
+
+		// If no new htlcs are allowed and we've not synced recently, re-sync.
+		// Sometimes htlc events aren't broadcast by lnd, and this keeps our
+		// pending htlc count accurate.
+		if !newHtlcAllowed && time.Since(p.lastChannelSync) > time.Minute {
+			deletes, err := p.syncPendingHtlcs(ctx)
+			if err != nil {
+				return err
+			}
+
+			// When dangling htlcs are removed, re-evaluate whether a new htlc
+			// is allowed.
+			if deletes {
+				newHtlcAllowed = p.newHtlcAllowed()
+			}
+		}
 
 		// If an htlc can be forwarded, make a reservation on the rate limiter
 		// if it does not already exist.

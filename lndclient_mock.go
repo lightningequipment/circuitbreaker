@@ -58,7 +58,7 @@ func (l *lndclientMock) getNodeAlias(key route.Vertex) (string, error) {
 	return "alias-" + key.String()[:6], nil
 }
 
-func (l *lndclientMock) getPendingIncomingHtlcs(ctx context.Context) (
+func (l *lndclientMock) getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
 	map[circuitKey]struct{}, error) {
 
 	htlcs := make(map[circuitKey]struct{})

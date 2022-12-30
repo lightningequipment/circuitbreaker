@@ -170,13 +170,18 @@ func (l *lndclientGrpc) getNodeAlias(key route.Vertex) (string, error) {
 	return info.Node.Alias, nil
 }
 
-func (l *lndclientGrpc) getPendingIncomingHtlcs(ctx context.Context) (
+func (l *lndclientGrpc) getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
 	map[circuitKey]struct{}, error) {
 
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	resp, err := l.main.ListChannels(ctx, &lnrpc.ListChannelsRequest{})
+	req := &lnrpc.ListChannelsRequest{}
+	if peer != nil {
+		req.Peer = peer[:]
+	}
+
+	resp, err := l.main.ListChannels(ctx, req)
 	if err != nil {
 		return nil, err
 	}
