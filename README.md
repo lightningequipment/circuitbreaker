@@ -59,7 +59,7 @@ An example configuration can be found [here](circuitbreaker-example.yaml)
 * Execute `circuitbreaker` with the correct command line flags to connect to
   `lnd`. See `circuitbreaker --help` for details.
 
-## Queue mode
+## Operating modes
 
 There are multiple modes in which `circuitbreaker` can operate. Mode can be
 configured globally and per peer in the configuration file.
@@ -74,11 +74,24 @@ configured globally and per peer in the configuration file.
   that the deliver by locking up liquidity along the route. This may push
   upstream nodes to install a firewall too and constrain the mishaving node.
 
+  Even in case of circuit breaker malfunction, queue mode should never cause
+  channel force closes because of lnd's [built-in
+  protection](https://github.com/lightningnetwork/lnd/pull/6831) that auto-fails
+  htlcs that aren't resolved.
+
+  WARNING 1: Auto-fail is not yet released and scheduled for lnd 0.16. With
+  earlier lnd versions, you risk force-closes!
+
+  WARNING 2: Edge case issues have been reported in `queue` mode. Usage of this
+  mode isn't recommended until those are resolved.
+
 * `queue_peer_initiated`: This mode is also queuing htlcs, but only those that
   come in through channels for which we aren't the channel open initiator. Not
   being the initiator means that the remote node is carrying the cost of a
   potential force-closure with stuck htlcs. For channels that we initiated, the
   safer `fail` mode is used.
+
+  WARNINGS: See `queue` mode warnings.
 
 ## Limitations
 * This software is alpha quality. Use at your own risk and be careful in particular on mainnet.
