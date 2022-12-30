@@ -83,9 +83,7 @@ type rateCounts struct {
 
 var rateCounterIntervals = []time.Duration{time.Hour, 24 * time.Hour}
 
-const burstSize = 10
-
-func newPeerController(logger *zap.SugaredLogger, cfg Limit,
+func newPeerController(logger *zap.SugaredLogger, cfg Limit, burstSize int,
 	htlcs map[circuitKey]struct{}) *peerController {
 
 	// Skip if no interval set.

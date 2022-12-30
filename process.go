@@ -16,6 +16,8 @@ var (
 	ctxb       = context.Background()
 )
 
+const burstSize = 10
+
 type lndclient interface {
 	getIdentity() (route.Vertex, error)
 
@@ -74,6 +76,8 @@ type process struct {
 
 	peerCtrls map[route.Vertex]*peerController
 
+	burstSize int
+
 	// Testing hook
 	resolvedCallback func()
 }
@@ -90,6 +94,7 @@ func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits) *proce
 		aliasMap:                make(map[route.Vertex]string),
 		peerCtrls:               make(map[route.Vertex]*peerController),
 		limits:                  limits,
+		burstSize:               burstSize,
 	}
 }
 
@@ -193,7 +198,7 @@ func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 		"peer", peer.String(),
 	)
 
-	ctrl := newPeerController(logger, peerCfg, htlcs)
+	ctrl := newPeerController(logger, peerCfg, p.burstSize, htlcs)
 
 	startGo(func() error {
 		return ctrl.run(ctx)

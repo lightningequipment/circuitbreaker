@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
+	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -33,18 +34,25 @@ const (
 )
 
 func testProcess(t *testing.T, event resolveEvent) {
-	cfg := &Config{
-		GroupConfig: GroupConfig{
-			MaxPendingHtlcs: 2,
-		},
-	}
-
 	client := newLndclientMock()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	log, err := zap.NewDevelopment()
 	require.NoError(t, err)
+
+	cfg := &Limits{
+		PerPeer: map[route.Vertex]Limit{
+			{2}: {
+				MaxHourlyRate: 60,
+				MaxPending:    1,
+			},
+			{3}: {
+				MaxHourlyRate: 60,
+				MaxPending:    1,
+			},
+		},
+	}
 
 	p := NewProcess(client, log.Sugar(), cfg)
 
@@ -106,11 +114,16 @@ func TestLimits(t *testing.T) {
 func testRateLimit(t *testing.T, mode Mode) {
 	defer Timeout()()
 
-	cfg := &Config{
-		GroupConfig: GroupConfig{
-			HtlcMinInterval: 2 * time.Second,
-			HtlcBurstSize:   2,
-			Mode:            mode,
+	cfg := &Limits{
+		PerPeer: map[route.Vertex]Limit{
+			{2}: {
+				MaxHourlyRate: 1800,
+				Mode:          mode,
+			},
+			{3}: {
+				MaxHourlyRate: 1800,
+				Mode:          mode,
+			},
 		},
 	}
 
@@ -122,6 +135,7 @@ func testRateLimit(t *testing.T, mode Mode) {
 	require.NoError(t, err)
 
 	p := NewProcess(client, log.Sugar(), cfg)
+	p.burstSize = 2
 
 	exit := make(chan error)
 	go func() {
@@ -189,12 +203,18 @@ func testRateLimit(t *testing.T, mode Mode) {
 func testMaxPending(t *testing.T, mode Mode) {
 	defer Timeout()()
 
-	cfg := &Config{
-		GroupConfig: GroupConfig{
-			HtlcMinInterval: time.Minute,
-			HtlcBurstSize:   2,
-			MaxPendingHtlcs: 1,
-			Mode:            mode,
+	cfg := &Limits{
+		PerPeer: map[route.Vertex]Limit{
+			{2}: {
+				MaxHourlyRate: 60,
+				MaxPending:    1,
+				Mode:          mode,
+			},
+			{3}: {
+				MaxHourlyRate: 60,
+				MaxPending:    1,
+				Mode:          mode,
+			},
 		},
 	}
 
@@ -206,6 +226,7 @@ func testMaxPending(t *testing.T, mode Mode) {
 	require.NoError(t, err)
 
 	p := NewProcess(client, log.Sugar(), cfg)
+	p.burstSize = 2
 
 	exit := make(chan error)
 	go func() {
