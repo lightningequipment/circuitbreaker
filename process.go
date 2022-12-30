@@ -411,25 +411,6 @@ func (p *process) processInterceptor(ctx context.Context,
 	}
 }
 
-func (p *process) getNodeAlias(key route.Vertex) string {
-	alias, ok := p.aliasMap[key]
-	if ok {
-		return alias
-	}
-
-	alias, err := p.client.getNodeAlias(key)
-	if err != nil {
-		p.log.Warnw("cannot get node alias",
-			"err", err)
-
-		return ""
-	}
-
-	p.aliasMap[key] = alias
-
-	return alias
-}
-
 func (p *process) getChanInfo(channel uint64) (*channel, error) {
 	// Try to look up from the cache.
 	ch, ok := p.chanMap[channel]
