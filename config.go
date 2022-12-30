@@ -1,4 +1,4 @@
-package circuitbreaker
+package main
 
 type Mode int
 

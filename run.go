@@ -7,7 +7,6 @@ import (
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/lightningequipment/circuitbreaker"
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
@@ -20,7 +19,7 @@ func run(c *cli.Context) error {
 	ctx := context.Background()
 
 	// Open database.
-	db, err := circuitbreaker.NewDb(ctx)
+	db, err := NewDb(ctx)
 	if err != nil {
 		return err
 	}
@@ -31,14 +30,14 @@ func run(c *cli.Context) error {
 		return err
 	}
 
-	lndCfg := circuitbreaker.LndConfig{
+	lndCfg := LndConfig{
 		RpcServer:   c.GlobalString("rpcserver"),
 		TlsCertPath: tlsCertPath,
 		MacPath:     macPath,
 		Log:         log,
 	}
 
-	client, err := circuitbreaker.NewLndClient(&lndCfg)
+	client, err := NewLndClient(&lndCfg)
 	if err != nil {
 		return err
 	}
@@ -49,7 +48,7 @@ func run(c *cli.Context) error {
 		return err
 	}
 
-	p := circuitbreaker.NewProcess(client, log, limits)
+	p := NewProcess(client, log, limits)
 
 	grpcServer := grpc.NewServer(
 		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer()),
@@ -58,7 +57,7 @@ func run(c *cli.Context) error {
 
 	reflection.Register(grpcServer)
 
-	server := circuitbreaker.NewServer(log, p, client, db)
+	server := NewServer(log, p, client, db)
 
 	circuitbreakerrpc.RegisterServiceServer(
 		grpcServer, server,
