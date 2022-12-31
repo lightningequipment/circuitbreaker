@@ -1,1 +1,3 @@
-circuitbreaker
+/circuitbreaker
+/circuitbreaker.db
+/webui/node_modules
