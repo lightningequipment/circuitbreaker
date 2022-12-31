@@ -169,6 +169,30 @@ func (p *peerController) run(ctx context.Context) error {
 				continue
 			}
 
+			// Determine whether the htlc can be forwarded immediately.
+			forwardDirect := true
+			switch {
+			case !newHtlcAllowed:
+				forwardDirect = false
+
+				logger.Infow("Failed on pending htlc limit")
+
+			case !p.limiter.Allow():
+				forwardDirect = false
+
+				logger.Infow("Failed on rate limit")
+			}
+
+			// Forward directly if possible.
+			if forwardDirect {
+				if err := p.forward(event.interceptEvent); err != nil {
+					return err
+				}
+
+				continue
+			}
+
+			// Queue if in one of the queue modes.
 			if p.cfg.Mode == ModeQueue ||
 				(p.cfg.Mode == ModeQueuePeerInitiated && event.peerInitiated) {
 
@@ -179,27 +203,8 @@ func (p *peerController) run(ctx context.Context) error {
 				continue
 			}
 
-			if !newHtlcAllowed {
-				if err := event.resume(false); err != nil {
-					return err
-				}
-
-				logger.Infow("Failed on pending htlc limit")
-
-				continue
-			}
-
-			if !p.limiter.Allow() {
-				if err := event.resume(false); err != nil {
-					return err
-				}
-
-				logger.Infow("Failed on rate limit")
-
-				continue
-			}
-
-			if err := p.forward(event.interceptEvent); err != nil {
+			// Otherwise fail directly.
+			if err := event.resume(false); err != nil {
 				return err
 			}
 
