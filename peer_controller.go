@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/lightningnetwork/lnd/routing/route"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -17,6 +18,10 @@ type peerController struct {
 	resolvedChan  chan circuitKey
 
 	htlcs map[circuitKey]struct{}
+
+	lastChannelSync time.Time
+	pubKey          route.Vertex
+	lnd             lndclient
 }
 
 type peerInterceptEvent struct {
@@ -25,37 +30,83 @@ type peerInterceptEvent struct {
 	peerInitiated bool
 }
 
-func newPeerController(logger *zap.SugaredLogger, cfg *groupConfig,
-	htlcs map[circuitKey]struct{}) *peerController {
+type peerControllerCfg struct {
+	logger *zap.SugaredLogger
+	cfg    *groupConfig
+	htlcs  map[circuitKey]struct{}
+	lnd    lndclient
+	pubKey route.Vertex
+}
+
+func newPeerController(cfg *peerControllerCfg) *peerController {
+	logger := cfg.logger
 
 	var limiter *rate.Limiter
 
 	// Skip if no interval set.
 	limit := rate.Inf
-	if cfg.HtlcMinInterval > 0 {
-		limit = rate.Every(cfg.HtlcMinInterval)
+	if cfg.cfg.HtlcMinInterval > 0 {
+		limit = rate.Every(cfg.cfg.HtlcMinInterval)
 	}
-	limiter = rate.NewLimiter(limit, cfg.HtlcBurstSize)
+	limiter = rate.NewLimiter(limit, cfg.cfg.HtlcBurstSize)
 
 	logger.Infow("Peer controller initialized",
-		"htlcMinInterval", cfg.HtlcMinInterval,
-		"htlcBurstSize", cfg.HtlcBurstSize,
-		"maxPendingHtlcs", cfg.MaxPendingHtlcs,
-		"mode", cfg.Mode)
+		"htlcMinInterval", cfg.cfg.HtlcMinInterval,
+		"htlcBurstSize", cfg.cfg.HtlcBurstSize,
+		"maxPendingHtlcs", cfg.cfg.MaxPendingHtlcs,
+		"mode", cfg.cfg.Mode)
 
 	// Log initial pending htlcs.
-	for h := range htlcs {
+	for h := range cfg.htlcs {
 		logger.Infow("Initial pending htlc", "channel", h.channel, "htlc", h.htlc)
 	}
 
 	return &peerController{
-		cfg:           cfg,
-		limiter:       limiter,
-		logger:        logger,
-		interceptChan: make(chan peerInterceptEvent),
-		resolvedChan:  make(chan circuitKey),
-		htlcs:         htlcs,
+		cfg:             cfg.cfg,
+		limiter:         limiter,
+		logger:          logger,
+		interceptChan:   make(chan peerInterceptEvent),
+		resolvedChan:    make(chan circuitKey),
+		htlcs:           cfg.htlcs,
+		lnd:             cfg.lnd,
+		pubKey:          cfg.pubKey,
+		lastChannelSync: time.Now(),
 	}
+}
+
+func (p *peerController) newHtlcAllowed() bool {
+	return p.cfg.MaxPendingHtlcs == 0 ||
+		len(p.htlcs) < p.cfg.MaxPendingHtlcs
+}
+
+func (p *peerController) syncPendingHtlcs(ctx context.Context) (bool, error) {
+	p.logger.Infow("Syncing pending htlcs")
+
+	htlcs, err := p.lnd.getPendingIncomingHtlcs(ctx, &p.pubKey)
+	if err != nil {
+		return false, err
+	}
+
+	p.lastChannelSync = time.Now()
+
+	deletes := false
+	for key := range p.htlcs {
+		_, ok := htlcs[key]
+		if ok {
+			continue
+		}
+
+		// Htlc is no longer pending on incoming side. Must have missed
+		// an htlc event. Clear it from our list.
+		delete(p.htlcs, key)
+
+		logger := p.keyLogger(key)
+		logger.Infow("Cleaning up dangling htlc")
+
+		deletes = true
+	}
+
+	return deletes, nil
 }
 
 func (p *peerController) run(ctx context.Context) error {
@@ -66,8 +117,23 @@ func (p *peerController) run(ctx context.Context) error {
 	for {
 		// New htlcs are allowed when the number of pending htlcs is below the
 		// limit, or no limit has been set.
-		newHtlcAllowed := p.cfg.MaxPendingHtlcs == 0 ||
-			len(p.htlcs) < p.cfg.MaxPendingHtlcs
+		newHtlcAllowed := p.newHtlcAllowed()
+
+		// If no new htlcs are allowed and we've not synced recently, re-sync.
+		// Sometimes htlc events aren't broadcast by lnd, and this keeps our
+		// pending htlc count accurate.
+		if !newHtlcAllowed && time.Since(p.lastChannelSync) > time.Minute {
+			deletes, err := p.syncPendingHtlcs(ctx)
+			if err != nil {
+				return err
+			}
+
+			// When dangling htlcs are removed, re-evaluate whether a new htlc
+			// is allowed.
+			if deletes {
+				newHtlcAllowed = p.newHtlcAllowed()
+			}
+		}
 
 		// If an htlc can be forwarded, make a reservation on the rate limiter
 		// if it does not already exist.
@@ -89,6 +155,9 @@ func (p *peerController) run(ctx context.Context) error {
 		case event := <-p.interceptChan:
 			logger := p.keyLogger(event.circuitKey)
 
+			// Replays can happen when the htlcs map is initialized with a
+			// pending htlc on startup, and then a forward event happens for
+			// that htlc.
 			_, ok := p.htlcs[event.circuitKey]
 			if ok {
 				logger.Infow("Replay")
