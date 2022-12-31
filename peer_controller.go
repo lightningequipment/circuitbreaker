@@ -157,9 +157,13 @@ func (p *peerController) run(ctx context.Context) error {
 
 			// Replays can happen when the htlcs map is initialized with a
 			// pending htlc on startup, and then a forward event happens for
-			// that htlc.
+			// that htlc. For those htlcs, just resume.
 			_, ok := p.htlcs[event.circuitKey]
 			if ok {
+				if err := event.resume(true); err != nil {
+					return err
+				}
+
 				logger.Infow("Replay")
 
 				continue
