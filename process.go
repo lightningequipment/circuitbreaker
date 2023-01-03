@@ -29,7 +29,7 @@ type lndclient interface {
 	htlcInterceptor(ctx context.Context) (
 		routerrpc.Router_HtlcInterceptorClient, error)
 
-	getPendingIncomingHtlcs(ctx context.Context) (
+	getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
 		map[circuitKey]struct{}, error)
 }
 
@@ -152,7 +152,14 @@ func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 		"peer", peer.String(),
 	)
 
-	ctrl := newPeerController(logger, peerCfg, htlcs)
+	cfg := &peerControllerCfg{
+		logger: logger,
+		cfg:    peerCfg,
+		htlcs:  htlcs,
+		lnd:    p.client,
+		pubKey: peer,
+	}
+	ctrl := newPeerController(cfg)
 
 	startGo(func() error {
 		return ctrl.run(ctx)
@@ -171,7 +178,7 @@ func (p *process) eventLoop(ctx context.Context) error {
 	}()
 
 	// Retrieve all pending htlcs from lnd.
-	allHtlcs, err := p.client.getPendingIncomingHtlcs(ctx)
+	allHtlcs, err := p.client.getPendingIncomingHtlcs(ctx, nil)
 	if err != nil {
 		return err
 	}
