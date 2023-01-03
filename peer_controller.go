@@ -6,16 +6,63 @@ import (
 	"time"
 
 	"github.com/lightningnetwork/lnd/routing/route"
+	"github.com/paulbellamy/ratecounter"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
+type eventCounter struct {
+	fail    *ratecounter.RateCounter
+	success *ratecounter.RateCounter
+	reject  *ratecounter.RateCounter
+}
+
+type eventType int
+
+const (
+	eventSuccess eventType = iota
+	eventFail
+	eventReject
+)
+
+func newEventCounter(interval time.Duration) *eventCounter {
+	return &eventCounter{
+		fail:    ratecounter.NewRateCounter(interval),
+		success: ratecounter.NewRateCounter(interval),
+		reject:  ratecounter.NewRateCounter(interval),
+	}
+}
+
+func (e *eventCounter) Incr(event eventType) {
+	switch event {
+	case eventSuccess:
+		e.success.Incr(1)
+
+	case eventFail:
+		e.fail.Incr(1)
+
+	case eventReject:
+		e.reject.Incr(1)
+
+	default:
+		panic("unknown event type")
+	}
+}
+
+func (e *eventCounter) Rates() (int64, int64, int64) {
+	return e.success.Rate(), e.fail.Rate(), e.reject.Rate()
+}
+
 type peerController struct {
-	cfg           *groupConfig
-	limiter       *rate.Limiter
-	logger        *zap.SugaredLogger
-	interceptChan chan peerInterceptEvent
-	resolvedChan  chan circuitKey
+	cfg             Limit
+	limiter         *rate.Limiter
+	logger          *zap.SugaredLogger
+	interceptChan   chan peerInterceptEvent
+	resolvedChan    chan resolvedEvent
+	updateLimitChan chan Limit
+	getStateChan    chan chan *peerState
+
+	rateCounters []*eventCounter
 
 	htlcs map[circuitKey]struct{}
 
@@ -30,70 +77,130 @@ type peerInterceptEvent struct {
 	peerInitiated bool
 }
 
+type peerState struct {
+	counts           []rateCounts
+	queueLen         int64
+	pendingHtlcCount int64
+}
+
+type rateCounts struct {
+	success, fail, reject int64
+}
+
+var rateCounterIntervals = []time.Duration{time.Hour, 24 * time.Hour}
+
 type peerControllerCfg struct {
-	logger *zap.SugaredLogger
-	cfg    *groupConfig
-	htlcs  map[circuitKey]struct{}
-	lnd    lndclient
-	pubKey route.Vertex
+	logger    *zap.SugaredLogger
+	limit     Limit
+	burstSize int
+	htlcs     map[circuitKey]struct{}
+	lnd       lndclient
+	pubKey    route.Vertex
 }
 
 func newPeerController(cfg *peerControllerCfg) *peerController {
-	logger := cfg.logger
-
-	var limiter *rate.Limiter
+	logger := cfg.logger.With(
+		"peer", cfg.pubKey.String(),
+	)
 
 	// Skip if no interval set.
-	limit := rate.Inf
-	if cfg.cfg.HtlcMinInterval > 0 {
-		limit = rate.Every(cfg.cfg.HtlcMinInterval)
-	}
-	limiter = rate.NewLimiter(limit, cfg.cfg.HtlcBurstSize)
+	limiter := rate.NewLimiter(getRate(cfg.limit.MaxHourlyRate), cfg.burstSize)
 
 	logger.Infow("Peer controller initialized",
-		"htlcMinInterval", cfg.cfg.HtlcMinInterval,
-		"htlcBurstSize", cfg.cfg.HtlcBurstSize,
-		"maxPendingHtlcs", cfg.cfg.MaxPendingHtlcs,
-		"mode", cfg.cfg.Mode)
+		"maxHourlyRate", cfg.limit.MaxHourlyRate,
+		"maxPendingHtlcs", cfg.limit.MaxPending,
+		"mode", cfg.limit.Mode)
 
 	// Log initial pending htlcs.
 	for h := range cfg.htlcs {
 		logger.Infow("Initial pending htlc", "channel", h.channel, "htlc", h.htlc)
 	}
 
+	rateCounters := make([]*eventCounter, len(rateCounterIntervals))
+	for idx, interval := range rateCounterIntervals {
+		rateCounters[idx] = newEventCounter(interval)
+	}
+
 	return &peerController{
-		cfg:             cfg.cfg,
+		cfg:             cfg.limit,
 		limiter:         limiter,
 		logger:          logger,
 		interceptChan:   make(chan peerInterceptEvent),
-		resolvedChan:    make(chan circuitKey),
+		resolvedChan:    make(chan resolvedEvent),
+		updateLimitChan: make(chan Limit),
+		getStateChan:    make(chan chan *peerState),
 		htlcs:           cfg.htlcs,
+		rateCounters:    rateCounters,
 		lnd:             cfg.lnd,
 		pubKey:          cfg.pubKey,
 		lastChannelSync: time.Now(),
 	}
 }
 
+func (p *peerController) state(ctx context.Context) (*peerState, error) {
+	respChan := make(chan *peerState)
+	select {
+	case p.getStateChan <- respChan:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	select {
+	case state := <-respChan:
+		return state, nil
+
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (p *peerController) rateInternal() []rateCounts {
+	allRateCounts := make([]rateCounts, len(p.rateCounters))
+	for idx, counter := range p.rateCounters {
+		success, fail, reject := counter.Rates()
+		allRateCounts[idx] = rateCounts{
+			success: success,
+			fail:    fail,
+			reject:  reject,
+		}
+	}
+
+	return allRateCounts
+}
+
+func (p *peerController) updateLimit(ctx context.Context, limit Limit) error {
+	select {
+	case p.updateLimitChan <- limit:
+		return nil
+
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (p *peerController) newHtlcAllowed() bool {
-	return p.cfg.MaxPendingHtlcs == 0 ||
-		len(p.htlcs) < p.cfg.MaxPendingHtlcs
+	return p.cfg.MaxPending == 0 ||
+		len(p.htlcs) < int(p.cfg.MaxPending)
 }
 
 func (p *peerController) syncPendingHtlcs(ctx context.Context) (bool, error) {
 	p.logger.Infow("Syncing pending htlcs")
 
-	htlcs, err := p.lnd.getPendingIncomingHtlcs(ctx, &p.pubKey)
+	allHtlcs, err := p.lnd.getPendingIncomingHtlcs(ctx, &p.pubKey)
 	if err != nil {
 		return false, err
 	}
+
+	htlcs := allHtlcs[p.pubKey]
 
 	p.lastChannelSync = time.Now()
 
 	deletes := false
 	for key := range p.htlcs {
-		_, ok := htlcs[key]
-		if ok {
-			continue
+		if htlcs != nil {
+			if _, ok := htlcs[key]; ok {
+				continue
+			}
 		}
 
 		// Htlc is no longer pending on incoming side. Must have missed
@@ -169,32 +276,30 @@ func (p *peerController) run(ctx context.Context) error {
 				continue
 			}
 
-			// Determine whether the htlc can be forwarded immediately.
-			forwardDirect := true
 			switch {
+			// If there is a queue, then don't jump the queue.
+			case queue.Len() > 0:
+
+			// Check if new htlcs are allowed.
 			case !newHtlcAllowed:
-				forwardDirect = false
+				logger.Infow("Pending htlc limit exceeded")
 
-				logger.Infow("Failed on pending htlc limit")
-
-			case !p.limiter.Allow():
-				forwardDirect = false
-
-				logger.Infow("Failed on rate limit")
-			}
-
-			// Forward directly if possible.
-			if forwardDirect {
+			// Check the rate limit and forward immediately if allowed.
+			case p.limiter.Allow():
 				if err := p.forward(event.interceptEvent); err != nil {
 					return err
 				}
 
 				continue
+
+			default:
+				logger.Infow("Rate limit exceeded")
 			}
 
 			// Queue if in one of the queue modes.
-			if p.cfg.Mode == ModeQueue ||
-				(p.cfg.Mode == ModeQueuePeerInitiated && event.peerInitiated) {
+			mode := p.cfg.Mode
+			if mode == ModeQueue ||
+				(mode == ModeQueuePeerInitiated && event.peerInitiated) {
 
 				queue.PushFront(event)
 
@@ -207,6 +312,8 @@ func (p *peerController) run(ctx context.Context) error {
 			if err := event.resume(false); err != nil {
 				return err
 			}
+
+			p.incrCounter(eventReject)
 
 		// There are items in the queue, max pending htlcs has not yet been
 		// reached, and the rate limit delay has passed. Take the oldest item
@@ -230,7 +337,9 @@ func (p *peerController) run(ctx context.Context) error {
 
 		// An htlc has been resolved in lnd. Remove it from the pending htlcs
 		// map to free up the slot for another htlc.
-		case key := <-p.resolvedChan:
+		case resolvedEvent := <-p.resolvedChan:
+			key := resolvedEvent.circuitKey
+
 			_, ok := p.htlcs[key]
 			if !ok {
 				// Do not log here, because the event is still coming even for
@@ -241,13 +350,55 @@ func (p *peerController) run(ctx context.Context) error {
 
 			delete(p.htlcs, key)
 
+			// Update rate counters.
+			if resolvedEvent.settled {
+				p.incrCounter(eventSuccess)
+			} else {
+				p.incrCounter(eventFail)
+			}
+
 			logger := p.keyLogger(key)
-			logger.Infow("Resolved htlc", "pending_htlcs", len(p.htlcs))
+			logger.Infow("Resolved htlc", "settled", resolvedEvent.settled,
+				"pending_htlcs", len(p.htlcs))
+
+		case limit := <-p.updateLimitChan:
+			p.logger.Infow("Updating peer controller", "limit", limit)
+			p.cfg = limit
+
+			p.limiter.SetLimit(getRate(limit.MaxHourlyRate))
+
+		case respChan := <-p.getStateChan:
+			counts := p.rateInternal()
+
+			select {
+			case respChan <- &peerState{
+				counts:           counts,
+				queueLen:         int64(queue.Len()),
+				pendingHtlcCount: int64(len(p.htlcs)),
+			}:
+
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
+}
+
+func (p *peerController) incrCounter(event eventType) {
+	for _, counter := range p.rateCounters {
+		counter.Incr(event)
+	}
+}
+
+func getRate(maxHourlyRate int64) rate.Limit {
+	if maxHourlyRate == 0 {
+		return rate.Inf
+	}
+
+	return rate.Limit(float64(maxHourlyRate) / 3600)
 }
 
 func (p *peerController) forward(event interceptEvent) error {
@@ -277,7 +428,7 @@ func (p *peerController) process(ctx context.Context,
 }
 
 func (p *peerController) resolved(ctx context.Context,
-	key circuitKey) error {
+	key resolvedEvent) error {
 
 	select {
 	case p.resolvedChan <- key:

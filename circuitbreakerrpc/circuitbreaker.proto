@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package circuitbreaker;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/lightningequipment/circuitbreaker/circuitbreakerrpc";
+
+service Service {
+    rpc GetInfo (GetInfoRequest) returns (GetInfoResponse) {
+        option (google.api.http) = {
+            get:"/info"
+        };
+    }
+
+    rpc UpdateLimit (UpdateLimitRequest) returns (UpdateLimitResponse) {
+        option (google.api.http) = {
+            post: "/updatelimit/{node}"
+            body: "*"
+        };
+    }
+
+    // Clear specific limit and use default.
+    rpc ClearLimit (ClearLimitRequest) returns (ClearLimitResponse) {
+        option (google.api.http) = {
+            post: "/clearlimit/{node}"
+        };
+    }
+
+    rpc UpdateDefaultLimit (UpdateDefaultLimitRequest) returns (UpdateDefaultLimitResponse) {
+        option (google.api.http) = {
+            post: "/updatedefaultlimit"
+            body: "*"
+        };
+    }
+
+    rpc ListLimits (ListLimitsRequest) returns (ListLimitsResponse) {
+        option (google.api.http) = {
+            get:"/limits"
+        };        
+    }
+}
+
+message GetInfoRequest {}
+
+message GetInfoResponse {
+    string connected_node = 1;
+}
+
+enum Mode {
+    MODE_FAIL = 0;
+    MODE_QUEUE = 1;
+    MODE_QUEUE_PEER_INITIATED = 2;
+}
+
+
+message ClearLimitRequest {
+    string node = 1;
+}
+
+message ClearLimitResponse {}
+
+message UpdateLimitRequest {
+    string node = 1;
+    Limit limit = 2;
+}
+
+message UpdateLimitResponse {}
+
+
+message UpdateDefaultLimitRequest {
+    Limit limit = 1;
+}
+
+message UpdateDefaultLimitResponse {}
+
+message ListLimitsRequest {}
+
+message ListLimitsResponse {
+    repeated NodeLimit limits = 5;
+
+    Limit default_limit = 2;
+}
+
+message NodeLimit {
+    string node = 1;
+    string alias = 5;
+
+    // The default limit applies if limit is not set.
+    Limit limit = 2;
+
+    Counter counter_1h = 3;
+    Counter counter_24h = 4;
+    int64 queue_len = 6;
+    int64 pending_htlc_count = 7;
+}
+
+message Limit {
+    int64 max_hourly_rate = 3;
+	int64 max_pending = 5;
+    Mode mode = 6;
+}
+
+message Counter {
+    int64 fail = 1;
+    int64 success = 2;
+    int64 reject = 3;
+}
