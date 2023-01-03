@@ -79,11 +79,8 @@ configured globally and per peer in the configuration file.
   protection](https://github.com/lightningnetwork/lnd/pull/6831) that auto-fails
   htlcs that aren't resolved.
 
-  WARNING 1: Auto-fail is not yet released and scheduled for lnd 0.16. With
+  WARNING: Auto-fail is not yet released and scheduled for lnd 0.16. With
   earlier lnd versions, you risk force-closes!
-
-  WARNING 2: Edge case issues have been reported in `queue` mode. Usage of this
-  mode isn't recommended until those are resolved.
 
 * `queue_peer_initiated`: This mode is also queuing htlcs, but only those that
   come in through channels for which we aren't the channel open initiator. Not
@@ -91,7 +88,7 @@ configured globally and per peer in the configuration file.
   potential force-closure with stuck htlcs. For channels that we initiated, the
   safer `fail` mode is used.
 
-  WARNINGS: See `queue` mode warnings.
+  WARNING: See `queue` mode warning.
 
 ## Limitations
 * This software is alpha quality. Use at your own risk and be careful in particular on mainnet.
