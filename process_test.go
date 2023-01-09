@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
+	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestProcess(t *testing.T) {
@@ -32,17 +33,27 @@ const (
 )
 
 func testProcess(t *testing.T, event resolveEvent) {
-	cfg := &config{
-		groupConfig: groupConfig{
-			MaxPendingHtlcs: 2,
-		},
-	}
-
 	client := newLndclientMock()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	p := newProcess(client, cfg)
+	log, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	cfg := &Limits{
+		PerPeer: map[route.Vertex]Limit{
+			{2}: {
+				MaxHourlyRate: 60,
+				MaxPending:    1,
+			},
+			{3}: {
+				MaxHourlyRate: 60,
+				MaxPending:    1,
+			},
+		},
+	}
+
+	p := NewProcess(client, log.Sugar(), cfg)
 
 	resolved := make(chan struct{})
 	p.resolvedCallback = func() {
@@ -51,35 +62,33 @@ func testProcess(t *testing.T, event resolveEvent) {
 
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx)
+		exit <- p.Run(ctx)
 	}()
 
-	key := &routerrpc.CircuitKey{
-		ChanId: 2,
-		HtlcId: 5,
+	key := circuitKey{
+		channel: 2,
+		htlc:    5,
 	}
-	client.htlcInterceptorRequests <- &routerrpc.ForwardHtlcInterceptRequest{
-		IncomingCircuitKey: key,
+	client.htlcInterceptorRequests <- &interceptedEvent{
+		circuitKey: key,
 	}
 
 	resp := <-client.htlcInterceptorResponses
-	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
+	require.True(t, resp.resume)
 
-	htlcEvent := &routerrpc.HtlcEvent{
-		EventType:         routerrpc.HtlcEvent_FORWARD,
-		IncomingChannelId: key.ChanId,
-		IncomingHtlcId:    key.HtlcId,
+	htlcEvent := &resolvedEvent{
+		circuitKey: key,
 	}
 
 	switch event {
 	case resolveEventForwardFail:
-		htlcEvent.Event = &routerrpc.HtlcEvent_ForwardFailEvent{}
+		htlcEvent.settled = false
 
 	case resolveEventLinkFail:
-		htlcEvent.Event = &routerrpc.HtlcEvent_LinkFailEvent{}
+		htlcEvent.settled = false
 
 	case resolveEventSettle:
-		htlcEvent.Event = &routerrpc.HtlcEvent_SettleEvent{}
+		htlcEvent.settled = true
 	}
 
 	client.htlcEvents <- htlcEvent
@@ -102,11 +111,16 @@ func TestLimits(t *testing.T) {
 func testRateLimit(t *testing.T, mode Mode) {
 	defer Timeout()()
 
-	cfg := &config{
-		groupConfig: groupConfig{
-			HtlcMinInterval: 2 * time.Second,
-			HtlcBurstSize:   2,
-			Mode:            mode,
+	cfg := &Limits{
+		PerPeer: map[route.Vertex]Limit{
+			{2}: {
+				MaxHourlyRate: 1800,
+				Mode:          mode,
+			},
+			{3}: {
+				MaxHourlyRate: 1800,
+				Mode:          mode,
+			},
 		},
 	}
 
@@ -114,11 +128,15 @@ func testRateLimit(t *testing.T, mode Mode) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	p := newProcess(client, cfg)
+	log, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	p := NewProcess(client, log.Sugar(), cfg)
+	p.burstSize = 2
 
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx)
+		exit <- p.Run(ctx)
 	}()
 
 	var chanId uint64 = 2
@@ -128,27 +146,27 @@ func testRateLimit(t *testing.T, mode Mode) {
 		chanId = 3
 	}
 
-	key := &routerrpc.CircuitKey{
-		ChanId: chanId,
-		HtlcId: 5,
+	key := circuitKey{
+		channel: chanId,
+		htlc:    5,
 	}
-	interceptReq := &routerrpc.ForwardHtlcInterceptRequest{
-		IncomingCircuitKey: key,
+	interceptReq := &interceptedEvent{
+		circuitKey: key,
 	}
 
 	// First htlc accepted.
 	client.htlcInterceptorRequests <- interceptReq
 	resp := <-client.htlcInterceptorResponses
-	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
+	require.True(t, resp.resume)
 
 	// Second htlc right after is also accepted because of burst size 2.
-	interceptReq.IncomingCircuitKey.HtlcId++
+	interceptReq.circuitKey.htlc++
 	client.htlcInterceptorRequests <- interceptReq
 	resp = <-client.htlcInterceptorResponses
-	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
+	require.True(t, resp.resume)
 
 	// Third htlc again right after should hit the rate limit.
-	interceptReq.IncomingCircuitKey.HtlcId++
+	interceptReq.circuitKey.htlc++
 	client.htlcInterceptorRequests <- interceptReq
 
 	interceptStart := time.Now()
@@ -156,16 +174,14 @@ func testRateLimit(t *testing.T, mode Mode) {
 	resp = <-client.htlcInterceptorResponses
 
 	if mode == ModeQueue {
-		require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
+		require.True(t, resp.resume)
 		require.GreaterOrEqual(t, time.Since(interceptStart), time.Second)
 	} else {
-		require.Equal(t, routerrpc.ResolveHoldForwardAction_FAIL, resp.Action)
+		require.False(t, resp.resume)
 
-		htlcEvent := &routerrpc.HtlcEvent{
-			EventType:         routerrpc.HtlcEvent_FORWARD,
-			IncomingChannelId: key.ChanId,
-			IncomingHtlcId:    key.HtlcId,
-			Event:             &routerrpc.HtlcEvent_ForwardFailEvent{},
+		htlcEvent := &resolvedEvent{
+			circuitKey: key,
+			settled:    false,
 		}
 
 		client.htlcEvents <- htlcEvent
@@ -182,12 +198,18 @@ func testRateLimit(t *testing.T, mode Mode) {
 func testMaxPending(t *testing.T, mode Mode) {
 	defer Timeout()()
 
-	cfg := &config{
-		groupConfig: groupConfig{
-			HtlcMinInterval: time.Minute,
-			HtlcBurstSize:   2,
-			MaxPendingHtlcs: 1,
-			Mode:            mode,
+	cfg := &Limits{
+		PerPeer: map[route.Vertex]Limit{
+			{2}: {
+				MaxHourlyRate: 60,
+				MaxPending:    1,
+				Mode:          mode,
+			},
+			{3}: {
+				MaxHourlyRate: 60,
+				MaxPending:    1,
+				Mode:          mode,
+			},
 		},
 	}
 
@@ -195,11 +217,15 @@ func testMaxPending(t *testing.T, mode Mode) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	p := newProcess(client, cfg)
+	log, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	p := NewProcess(client, log.Sugar(), cfg)
+	p.burstSize = 2
 
 	exit := make(chan error)
 	go func() {
-		exit <- p.run(ctx)
+		exit <- p.Run(ctx)
 	}()
 
 	var chanId uint64 = 2
@@ -209,21 +235,21 @@ func testMaxPending(t *testing.T, mode Mode) {
 		chanId = 3
 	}
 
-	key := &routerrpc.CircuitKey{
-		ChanId: chanId,
-		HtlcId: 5,
+	key := circuitKey{
+		channel: chanId,
+		htlc:    5,
 	}
-	interceptReq := &routerrpc.ForwardHtlcInterceptRequest{
-		IncomingCircuitKey: key,
+	interceptReq := &interceptedEvent{
+		circuitKey: key,
 	}
 
 	// First htlc accepted.
 	client.htlcInterceptorRequests <- interceptReq
 	resp := <-client.htlcInterceptorResponses
-	require.Equal(t, routerrpc.ResolveHoldForwardAction_RESUME, resp.Action)
+	require.True(t, resp.resume)
 
 	// Second htlc should be hitting the max pending htlcs limit.
-	interceptReq.IncomingCircuitKey.HtlcId++
+	interceptReq.circuitKey.htlc++
 	client.htlcInterceptorRequests <- interceptReq
 
 	if mode == ModeQueue {
@@ -235,7 +261,7 @@ func testMaxPending(t *testing.T, mode Mode) {
 		}
 	} else {
 		resp = <-client.htlcInterceptorResponses
-		require.Equal(t, routerrpc.ResolveHoldForwardAction_FAIL, resp.Action)
+		require.False(t, resp.resume)
 	}
 
 	cancel()

@@ -12,11 +12,13 @@ Furthermore it is possible to apply rate limits to the number of forwarded
 htlcs. This offers protection against DoS/spam attacks that rely on large
 numbers of fast-resolving htlcs. Rate limiting is implemented with a [Token
 bucket](https://en.wikipedia.org/wiki/Token_bucket). In configuration the
-minimum interval between htlcs and a burst size can be specified.
+minimum interval between htlcs can be specified.
 
 Large numbers of htlcs are also required for probing channel balances. Reducing the
 information leakage through probing could be another reason to put in place a
 rate limit for untrusted peers.
+
+![screenshot](screenshot.png)
 
 ## Why are limits needed?
 
@@ -41,23 +43,38 @@ This is where `circuitbreaker` comes in. It puts up a defense around that
 valuable channel liquidity and helps to keep the locked coins at work to
 maximize routing revenue.
 
+## Insights
+
+In addition to firewall functionality, `circuitbreaker` also provides counters
+for the number of htlcs that settled, failed and were rejected in the last hour
+and day on a peer-by-peer basis.
+
 ## How to use
 
 ### Requirements
-* `go` 1.13
-* `lnd` version 0.11.0-beta or above.
+* `go` 1.18
+* `lnd` version 0.15.4-beta or above.
 
 ### Configuration
-`circuitbreaker` by default reads its configuration from `~/.circuitbreaker/circuitbreaker.yaml`.
-An example configuration can be found [here](circuitbreaker-example.yaml)
+`circuitbreaker` can be configured through a web ui. The configuration is stored
+in a sqlite database located at `~/.circuitbreaker/circuitbreaker.db` (on
+linux).
 
-### Run
+### Run locally
 
 * Clone this repository
 * `cd circuitbreaker/`
 * `go install`
 * Execute `circuitbreaker` with the correct command line flags to connect to
   `lnd`. See `circuitbreaker --help` for details.
+* Open http://127.0.0.1:9235 in a browser.
+
+### Run using Docker
+
+* Start docker container:
+  
+  `docker run -v <lnd_tls_cert_path>:/root/.lnd/tls.cert -v <lnd_macaroon_path>:/root/.lnd/data/chain/bitcoin/mainnet/admin.macaroon -p 9235:9235 ghcr.io/lightningequipment/circuitbreaker:latest --rpcserver host.docker.internal:10009 --httplisten 0.0.0.0:9235`
+* Open http://127.0.0.1:9235 in a browser.
 
 ## Operating modes
 
@@ -89,6 +106,13 @@ configured globally and per peer in the configuration file.
   safer `fail` mode is used.
 
   WARNING: See `queue` mode warning.
+
+## Stub/demo
+
+For a quick try out or demo, it is possible to run circuitbreaker in stub mode.
+In this mode, fake traffic is generated and no lnd instance is required.
+
+`docker run -p 9235:9235 ghcr.io/lightningequipment/circuitbreaker:latest --httplisten 0.0.0.0:9235 --stub`
 
 ## Limitations
 * This software is alpha quality. Use at your own risk and be careful in particular on mainnet.

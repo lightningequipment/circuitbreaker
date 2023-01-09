@@ -10,16 +10,16 @@ import (
 var mockIdentity = route.Vertex{1, 2, 3}
 
 type lndclientMock struct {
-	htlcEvents               chan *routerrpc.HtlcEvent
-	htlcInterceptorRequests  chan *routerrpc.ForwardHtlcInterceptRequest
-	htlcInterceptorResponses chan *routerrpc.ForwardHtlcInterceptResponse
+	htlcEvents               chan *resolvedEvent
+	htlcInterceptorRequests  chan *interceptedEvent
+	htlcInterceptorResponses chan *interceptResponse
 }
 
 func newLndclientMock() *lndclientMock {
 	return &lndclientMock{
-		htlcEvents:               make(chan *routerrpc.HtlcEvent),
-		htlcInterceptorRequests:  make(chan *routerrpc.ForwardHtlcInterceptRequest),
-		htlcInterceptorResponses: make(chan *routerrpc.ForwardHtlcInterceptResponse),
+		htlcEvents:               make(chan *resolvedEvent),
+		htlcInterceptorRequests:  make(chan *interceptedEvent),
+		htlcInterceptorResponses: make(chan *interceptResponse),
 	}
 }
 
@@ -34,9 +34,8 @@ func (l *lndclientMock) listChannels() (map[uint64]*channel, error) {
 	}, nil
 }
 
-func (l *lndclientMock) subscribeHtlcEvents(ctx context.Context,
-	in *routerrpc.SubscribeHtlcEventsRequest) (
-	routerrpc.Router_SubscribeHtlcEventsClient, error) {
+func (l *lndclientMock) subscribeHtlcEvents(ctx context.Context) (
+	htlcEventsClient, error) {
 
 	return &htlcEventsMock{
 		ctx:        ctx,
@@ -45,7 +44,7 @@ func (l *lndclientMock) subscribeHtlcEvents(ctx context.Context,
 }
 
 func (l *lndclientMock) htlcInterceptor(ctx context.Context) (
-	routerrpc.Router_HtlcInterceptorClient, error) {
+	htlcInterceptorClient, error) {
 
 	return &htlcInterceptorMock{
 		ctx:                      ctx,
@@ -58,10 +57,10 @@ func (l *lndclientMock) getNodeAlias(key route.Vertex) (string, error) {
 	return "alias-" + key.String()[:6], nil
 }
 
-func (l *lndclientMock) getPendingIncomingHtlcs(ctx context.Context,
-	peer *route.Vertex) (map[circuitKey]struct{}, error) {
+func (l *lndclientMock) getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
+	map[route.Vertex]map[circuitKey]struct{}, error) {
 
-	htlcs := make(map[circuitKey]struct{})
+	htlcs := make(map[route.Vertex]map[circuitKey]struct{})
 
 	return htlcs, nil
 }
@@ -70,10 +69,10 @@ type htlcEventsMock struct {
 	ctx context.Context //nolint:containedctx
 	routerrpc.Router_SubscribeHtlcEventsClient
 
-	htlcEvents chan *routerrpc.HtlcEvent
+	htlcEvents chan *resolvedEvent
 }
 
-func (h *htlcEventsMock) Recv() (*routerrpc.HtlcEvent, error) {
+func (h *htlcEventsMock) recv() (*resolvedEvent, error) {
 	select {
 	case event := <-h.htlcEvents:
 		return event, nil
@@ -87,11 +86,11 @@ type htlcInterceptorMock struct {
 	ctx context.Context //nolint:containedctx
 	routerrpc.Router_HtlcInterceptorClient
 
-	htlcInterceptorRequests  chan *routerrpc.ForwardHtlcInterceptRequest
-	htlcInterceptorResponses chan *routerrpc.ForwardHtlcInterceptResponse
+	htlcInterceptorRequests  chan *interceptedEvent
+	htlcInterceptorResponses chan *interceptResponse
 }
 
-func (h *htlcInterceptorMock) Send(resp *routerrpc.ForwardHtlcInterceptResponse) error {
+func (h *htlcInterceptorMock) send(resp *interceptResponse) error {
 	select {
 	case h.htlcInterceptorResponses <- resp:
 		return nil
@@ -101,7 +100,7 @@ func (h *htlcInterceptorMock) Send(resp *routerrpc.ForwardHtlcInterceptResponse)
 	}
 }
 
-func (h *htlcInterceptorMock) Recv() (*routerrpc.ForwardHtlcInterceptRequest, error) {
+func (h *htlcInterceptorMock) recv() (*interceptedEvent, error) {
 	select {
 	case event := <-h.htlcInterceptorRequests:
 		return event, nil

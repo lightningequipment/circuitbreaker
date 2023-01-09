@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
-	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -15,6 +16,8 @@ var (
 	ctxb       = context.Background()
 )
 
+const burstSize = 10
+
 type lndclient interface {
 	getIdentity() (route.Vertex, error)
 
@@ -22,15 +25,12 @@ type lndclient interface {
 
 	getNodeAlias(key route.Vertex) (string, error)
 
-	subscribeHtlcEvents(ctx context.Context,
-		in *routerrpc.SubscribeHtlcEventsRequest) (
-		routerrpc.Router_SubscribeHtlcEventsClient, error)
+	subscribeHtlcEvents(ctx context.Context) (htlcEventsClient, error)
 
-	htlcInterceptor(ctx context.Context) (
-		routerrpc.Router_HtlcInterceptorClient, error)
+	htlcInterceptor(ctx context.Context) (htlcInterceptorClient, error)
 
 	getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
-		map[circuitKey]struct{}, error)
+		map[route.Vertex]map[circuitKey]struct{}, error)
 }
 
 type circuitKey struct {
@@ -40,16 +40,31 @@ type circuitKey struct {
 
 type interceptEvent struct {
 	circuitKey
-	valueMsat int64
-	resume    func(bool) error
+	resume func(bool) error
+}
+
+type resolvedEvent struct {
+	circuitKey
+	settled bool
+}
+
+type rateCounters struct {
+	counters map[route.Vertex]*peerState
+}
+
+type rateCountersRequest struct {
+	counters chan *rateCounters
 }
 
 type process struct {
 	client lndclient
-	cfg    *config
+	limits *Limits
+	log    *zap.SugaredLogger
 
-	interceptChan chan interceptEvent
-	resolveChan   chan circuitKey
+	interceptChan           chan interceptEvent
+	resolveChan             chan resolvedEvent
+	updateLimitChan         chan updateLimitEvent
+	rateCountersRequestChan chan rateCountersRequest
 
 	identity route.Vertex
 	chanMap  map[uint64]*channel
@@ -57,39 +72,70 @@ type process struct {
 
 	peerCtrls map[route.Vertex]*peerController
 
+	burstSize int
+
 	// Testing hook
 	resolvedCallback func()
 }
 
-func newProcess(client lndclient, cfg *config) *process {
+func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits) *process {
 	return &process{
-		interceptChan: make(chan interceptEvent),
-		resolveChan:   make(chan circuitKey),
-		chanMap:       make(map[uint64]*channel),
-		aliasMap:      make(map[route.Vertex]string),
-		client:        client,
-		cfg:           cfg,
-		peerCtrls:     make(map[route.Vertex]*peerController),
+		log:                     log,
+		client:                  client,
+		interceptChan:           make(chan interceptEvent),
+		resolveChan:             make(chan resolvedEvent),
+		updateLimitChan:         make(chan updateLimitEvent),
+		rateCountersRequestChan: make(chan rateCountersRequest),
+		chanMap:                 make(map[uint64]*channel),
+		aliasMap:                make(map[route.Vertex]string),
+		peerCtrls:               make(map[route.Vertex]*peerController),
+		limits:                  limits,
+		burstSize:               burstSize,
 	}
 }
 
-func (p *process) run(ctx context.Context) error {
-	log.Info("CircuitBreaker started")
+type updateLimitEvent struct {
+	limit *Limit
+	peer  *route.Vertex
+}
+
+func (p *process) UpdateLimit(ctx context.Context, peer *route.Vertex,
+	limit *Limit) error {
+
+	if peer == nil && limit == nil {
+		return errors.New("cannot clear default limit")
+	}
+
+	update := updateLimitEvent{
+		limit: limit,
+		peer:  peer,
+	}
+
+	select {
+	case p.updateLimitChan <- update:
+		return nil
+
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (p *process) Run(ctx context.Context) error {
+	p.log.Info("CircuitBreaker started")
 
 	var err error
+
 	p.identity, err = p.client.getIdentity()
 	if err != nil {
 		return err
 	}
 
-	log.Infow("Connected to lnd node",
+	p.log.Infow("Connected to lnd node",
 		"pubkey", p.identity.String())
 
 	group, ctx := errgroup.WithContext(ctx)
 
-	stream, err := p.client.subscribeHtlcEvents(
-		ctx, &routerrpc.SubscribeHtlcEventsRequest{},
-	)
+	stream, err := p.client.subscribeHtlcEvents(ctx)
 	if err != nil {
 		return err
 	}
@@ -99,7 +145,7 @@ func (p *process) run(ctx context.Context) error {
 		return err
 	}
 
-	log.Info("Interceptor/notification handlers registered")
+	p.log.Info("Interceptor/notification handlers registered")
 
 	group.Go(func() error {
 		err := p.processHtlcEvents(ctx, stream)
@@ -143,21 +189,18 @@ func (p *process) getPeerController(ctx context.Context, peer route.Vertex,
 func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 	startGo func(func() error), htlcs map[circuitKey]struct{}) *peerController {
 
-	peerCfg := p.cfg.forPeer(peer)
-
-	alias := p.getNodeAlias(peer)
-
-	logger := log.With(
-		"peer_alias", alias,
-		"peer", peer.String(),
-	)
+	peerCfg, ok := p.limits.PerPeer[peer]
+	if !ok {
+		peerCfg = p.limits.Default
+	}
 
 	cfg := &peerControllerCfg{
-		logger: logger,
-		cfg:    peerCfg,
-		htlcs:  htlcs,
-		lnd:    p.client,
-		pubKey: peer,
+		logger:    p.log,
+		limit:     peerCfg,
+		burstSize: p.burstSize,
+		htlcs:     htlcs,
+		lnd:       p.client,
+		pubKey:    peer,
 	}
 	ctrl := newPeerController(cfg)
 
@@ -178,26 +221,9 @@ func (p *process) eventLoop(ctx context.Context) error {
 	}()
 
 	// Retrieve all pending htlcs from lnd.
-	allHtlcs, err := p.client.getPendingIncomingHtlcs(ctx, nil)
+	htlcsPerPeer, err := p.client.getPendingIncomingHtlcs(ctx, nil)
 	if err != nil {
 		return err
-	}
-
-	// Arrange htlcs per peer.
-	htlcsPerPeer := make(map[route.Vertex]map[circuitKey]struct{})
-	for h := range allHtlcs {
-		peer, err := p.getChanInfo(h.channel)
-		if err != nil {
-			return err
-		}
-
-		htlcs := htlcsPerPeer[peer.peer]
-		if htlcs == nil {
-			htlcs = make(map[circuitKey]struct{})
-			htlcsPerPeer[peer.peer] = htlcs
-		}
-
-		htlcs[h] = struct{}{}
 	}
 
 	// Initialize peer controllers with currently pending htlcs.
@@ -223,15 +249,15 @@ func (p *process) eventLoop(ctx context.Context) error {
 				return err
 			}
 
-		case resolvedKey := <-p.resolveChan:
-			chanInfo, err := p.getChanInfo(resolvedKey.channel)
+		case resolvedEvent := <-p.resolveChan:
+			chanInfo, err := p.getChanInfo(resolvedEvent.channel)
 			if err != nil {
 				return err
 			}
 
 			ctrl := p.getPeerController(ctx, chanInfo.peer, group.Go)
 
-			if err := ctrl.resolved(ctx, resolvedKey); err != nil {
+			if err := ctrl.resolved(ctx, resolvedEvent); err != nil {
 				return err
 			}
 
@@ -239,40 +265,106 @@ func (p *process) eventLoop(ctx context.Context) error {
 				p.resolvedCallback()
 			}
 
+		case update := <-p.updateLimitChan:
+			switch {
+			// Update sets default limit.
+			case update.peer == nil:
+				p.limits.Default = *update.limit
+
+				// Update all controllers that have no specific limit.
+				for node, ctrl := range p.peerCtrls {
+					_, ok := p.limits.PerPeer[node]
+					if ok {
+						continue
+					}
+
+					err := ctrl.updateLimit(ctx, *update.limit)
+					if err != nil {
+						return err
+					}
+				}
+
+			// Update sets specific limit.
+			case update.limit != nil:
+				p.limits.PerPeer[*update.peer] = *update.limit
+
+				// Update specific controller if it exists.
+				ctrl, ok := p.peerCtrls[*update.peer]
+				if ok {
+					err := ctrl.updateLimit(ctx, *update.limit)
+					if err != nil {
+						return err
+					}
+				}
+
+			// Update clears limit.
+			case update.limit == nil:
+				delete(p.limits.PerPeer, *update.peer)
+
+				// Apply default limit to peer controller.
+				ctrl, ok := p.peerCtrls[*update.peer]
+				if ok {
+					err := ctrl.updateLimit(ctx, p.limits.Default)
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+		case req := <-p.rateCountersRequestChan:
+			allCounts := make(map[route.Vertex]*peerState)
+			for node, ctrl := range p.peerCtrls {
+				state, err := ctrl.state(ctx)
+				if err != nil {
+					return err
+				}
+
+				allCounts[node] = state
+			}
+
+			req.counters <- &rateCounters{
+				counters: allCounts,
+			}
+
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
 }
 
+func (p *process) getRateCounters(ctx context.Context) (
+	map[route.Vertex]*peerState, error) {
+
+	replyChan := make(chan *rateCounters)
+
+	select {
+	case p.rateCountersRequestChan <- rateCountersRequest{
+		counters: replyChan,
+	}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	select {
+	case reply := <-replyChan:
+		return reply.counters, nil
+
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
 func (p *process) processHtlcEvents(ctx context.Context,
-	stream routerrpc.Router_SubscribeHtlcEventsClient) error {
+	stream htlcEventsClient) error {
 
 	for {
-		event, err := stream.Recv()
+		event, err := stream.recv()
 		if err != nil {
 			return err
 		}
 
-		if event.EventType != routerrpc.HtlcEvent_FORWARD {
-			continue
-		}
-
-		switch event.Event.(type) {
-		case *routerrpc.HtlcEvent_SettleEvent:
-		case *routerrpc.HtlcEvent_ForwardFailEvent:
-		case *routerrpc.HtlcEvent_LinkFailEvent:
-
-		default:
-			continue
-		}
-
 		select {
-		case p.resolveChan <- circuitKey{
-			channel: event.IncomingChannelId,
-			htlc:    event.IncomingHtlcId,
-		}:
-
+		case p.resolveChan <- *event:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -280,39 +372,26 @@ func (p *process) processHtlcEvents(ctx context.Context,
 }
 
 func (p *process) processInterceptor(ctx context.Context,
-	interceptor routerrpc.Router_HtlcInterceptorClient) error {
+	interceptor htlcInterceptorClient) error {
 
 	for {
-		event, err := interceptor.Recv()
+		event, err := interceptor.recv()
 		if err != nil {
 			return err
 		}
 
-		key := circuitKey{
-			channel: event.IncomingCircuitKey.ChanId,
-			htlc:    event.IncomingCircuitKey.HtlcId,
-		}
+		key := event.circuitKey
 
 		resume := func(resume bool) error {
-			response := &routerrpc.ForwardHtlcInterceptResponse{
-				IncomingCircuitKey: &routerrpc.CircuitKey{
-					ChanId: key.channel,
-					HtlcId: key.htlc,
-				},
-			}
-			if resume {
-				response.Action = routerrpc.ResolveHoldForwardAction_RESUME
-			} else {
-				response.Action = routerrpc.ResolveHoldForwardAction_FAIL
-			}
-
-			return interceptor.Send(response)
+			return interceptor.send(&interceptResponse{
+				key:    key,
+				resume: resume,
+			})
 		}
 
 		select {
 		case p.interceptChan <- interceptEvent{
 			circuitKey: key,
-			valueMsat:  int64(event.OutgoingAmountMsat),
 			resume:     resume,
 		}:
 
@@ -320,25 +399,6 @@ func (p *process) processInterceptor(ctx context.Context,
 			return ctx.Err()
 		}
 	}
-}
-
-func (p *process) getNodeAlias(key route.Vertex) string {
-	alias, ok := p.aliasMap[key]
-	if ok {
-		return alias
-	}
-
-	alias, err := p.client.getNodeAlias(key)
-	if err != nil {
-		log.Warnw("cannot get node alias",
-			"err", err)
-
-		return ""
-	}
-
-	p.aliasMap[key] = alias
-
-	return alias
 }
 
 func (p *process) getChanInfo(channel uint64) (*channel, error) {
