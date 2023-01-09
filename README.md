@@ -11,7 +11,7 @@ only a few pending htlcs.
 Furthermore it is possible to apply rate limits to the number of forwarded
 htlcs. This offers protection against DoS/spam attacks that rely on large
 numbers of fast-resolving htlcs. Rate limiting is implemented with a [Token
-bucket](https://en.wikipedia.org/wiki/Token_bucket). In configuration the
+bucket](https://en.wikipedia.org/wiki/Token_bucket). Via the UI the
 minimum interval between htlcs can be specified.
 
 Large numbers of htlcs are also required for probing channel balances. Reducing the
@@ -78,8 +78,8 @@ linux).
 
 ## Operating modes
 
-There are multiple modes in which `circuitbreaker` can operate. Mode can be
-configured globally and per peer in the configuration file.
+There are multiple modes in which `circuitbreaker` can operate. A default mode
+and per-peer overrides can be configured via the web ui.
 
 * `fail`: Fail back htlcs when limits are exceeded. This minimizes the lock-up
   of liquidity on the incoming side, but does affect your reputation as a
