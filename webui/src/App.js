@@ -105,7 +105,7 @@ function App() {
       }
 
       fetchData();
-    }, 1000)
+    }, 60000)
 
     return () => clearInterval(interval)
   }, []);
