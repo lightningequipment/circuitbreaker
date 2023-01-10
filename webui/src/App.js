@@ -274,7 +274,7 @@ function App() {
         <Column rowEditor></Column>
       </DataTable>
 
-      <h3 style={{ 'padding-top': '2rem' }}>Per node limits</h3>
+      <h3 style={{ paddingTop: '2rem' }}>Per node limits</h3>
       <DataTable value={data} responsiveLayout="scroll" sortField="node" sortOrder={1} headerColumnGroup={headerGroup} editMode="row" onRowEditComplete={onRowEditComplete} size="small">
         <Column field="node" body={bodyTemplate}></Column>
         <Column field="counter1h_success" body={(rowData) => dashNumberBodyTemplate(rowData.counter1h_success)}></Column>
