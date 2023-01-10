@@ -26,6 +26,8 @@ function App() {
   const [dynamicColumns, setDynamicColumns] = useState();
   const tooltipRef = useRef(null);
   const warningMsg = useRef(null);
+  const defaultTableEditing = useRef(false);
+  const nodeTableEditing = useRef(false);
 
   const fetchData = async () => {
     try {
@@ -94,6 +96,18 @@ function App() {
 
   useEffect(() => {
     fetchData();
+
+    const interval = setInterval(() => {
+      if (defaultTableEditing.current || nodeTableEditing.current) {
+        console.log('skip update because editing')
+
+        return
+      }
+
+      fetchData();
+    }, 1000)
+
+    return () => clearInterval(interval)
   }, []);
 
   useEffect(() => {
@@ -230,7 +244,7 @@ function App() {
     return number
   }
 
-  
+
 
   let headerGroup = (
     <ColumnGroup>
@@ -267,7 +281,7 @@ function App() {
       <Tooltip ref={tooltipRef} target=".custom-tooltip"></Tooltip>
 
       <h3>Default limit</h3>
-      <DataTable value={defaultLimits} editMode="row" onRowEditComplete={onDefaultLimitEditComplete} size="small">
+      <DataTable value={defaultLimits} editMode="row" onRowEditComplete={onDefaultLimitEditComplete} size="small" onRowEditInit={() => defaultTableEditing.current = true} onRowEditCancel={() => defaultTableEditing.current = false} onRowEditSave={() => defaultTableEditing.current = false}>
         <Column header="Max Hourly Rate" field="maxHourlyRate" body={(rowData => numberBodyTemplate(rowData.mode, rowData.maxHourlyRate))} editor={(options) => textEditor(options)}></Column>
         <Column header="Max Pending" field="maxPending" body={(rowData => numberBodyTemplate(rowData.mode, rowData.maxPending))} editor={(options) => textEditor(options)}></Column>
         <Column header="Mode" field="mode" body={modeBodyTemplate} editor={(options) => modeEditor(options, false)}></Column>
@@ -275,7 +289,7 @@ function App() {
       </DataTable>
 
       <h3 style={{ paddingTop: '2rem' }}>Per node limits</h3>
-      <DataTable value={data} responsiveLayout="scroll" sortField="node" sortOrder={1} headerColumnGroup={headerGroup} editMode="row" onRowEditComplete={onRowEditComplete} size="small">
+      <DataTable value={data} responsiveLayout="scroll" sortField="node" sortOrder={1} headerColumnGroup={headerGroup} editMode="row" onRowEditComplete={onRowEditComplete} size="small" onRowEditInit={() => nodeTableEditing.current = true} onRowEditCancel={() => nodeTableEditing.current = false} onRowEditSave={() => nodeTableEditing.current = false}>
         <Column field="node" body={bodyTemplate}></Column>
         <Column field="counter1h_success" body={(rowData) => dashNumberBodyTemplate(rowData.counter1h_success)}></Column>
         <Column field="counter1h_fail" body={(rowData) => dashNumberBodyTemplate(rowData.counter1h_fail)}></Column>
