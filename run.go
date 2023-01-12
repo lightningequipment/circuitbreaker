@@ -33,6 +33,8 @@ func run(c *cli.Context) error {
 	}
 	dbPath := filepath.Join(confDir, dbFn)
 
+	log.Infow("Circuit Breaker starting", "version", BuildVersion)
+
 	log.Infow("Opening database", "path", dbPath)
 
 	// Open database.

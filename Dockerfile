@@ -14,13 +14,15 @@ RUN npm run build
 ### Build backend
 FROM golang:1.18-alpine AS build_backend
 
+ARG BUILD_VERSION
+
 WORKDIR /src
 
 COPY *.go go.mod go.sum ./
 COPY circuitbreakerrpc circuitbreakerrpc/
 COPY --from=build_frontend /webui-build/ webui-build/
 
-RUN go install .
+RUN go install -ldflags "-X main.BuildVersion=$BUILD_VERSION".
 
 ### Build an Alpine image
 FROM alpine:3.16 as alpine
