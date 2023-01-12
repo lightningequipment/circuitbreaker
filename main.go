@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/btcsuite/btcd/btcutil"
-	"github.com/lightningnetwork/lnd/build"
 	"github.com/urfave/cli"
 )
 
@@ -86,12 +85,14 @@ func extractPathArgs(ctx *cli.Context) (string, string, error) {
 	return tlsCertPath, macPath, nil
 }
 
+var BuildVersion = "development"
+
 func main() {
 	defaultAppDir := btcutil.AppDataDir("circuitbreaker", false)
 
 	app := cli.NewApp()
 	app.Name = "circuitbreakerd"
-	app.Version = build.Version() + " commit=" + build.Commit
+	app.Version = BuildVersion
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:  "rpcserver",
