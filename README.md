@@ -2,6 +2,8 @@
 
 `circuitbreaker` is to Lightning what firewalls are to the internet.
 
+<img src="logo.png">
+
 It allows nodes to protect themselves from being flooded with htlcs. With
 `circuitbreaker` a maximum to the number of in-flight htlcs can be set on a
 per-peer basis. Known and trusted peers for example can be assigned a higher
