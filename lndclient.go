@@ -208,8 +208,6 @@ func (l *lndclientGrpc) listChannels() (map[uint64]*channel, error) {
 	ctx, cancel := context.WithTimeout(ctxb, rpcTimeout)
 	defer cancel()
 
-	l.log.Debugw("Retrieving channels")
-
 	resp, err := l.main.ListChannels(ctx, &lnrpc.ListChannelsRequest{})
 	if err != nil {
 		return nil, err

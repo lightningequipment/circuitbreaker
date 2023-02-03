@@ -12,7 +12,8 @@ import (
 )
 
 var (
-	rpcTimeout = 10 * time.Second
+	rpcTimeout                 = 10 * time.Second
+	defaultPeerRefreshInterval = 10 * time.Minute
 )
 
 const burstSize = 10
@@ -64,6 +65,7 @@ type process struct {
 	resolveChan             chan resolvedEvent
 	updateLimitChan         chan updateLimitEvent
 	rateCountersRequestChan chan rateCountersRequest
+	newPeerChan             chan route.Vertex
 
 	identity route.Vertex
 	chanMap  map[uint64]*channel
@@ -71,7 +73,8 @@ type process struct {
 
 	peerCtrls map[route.Vertex]*peerController
 
-	burstSize int
+	burstSize           int
+	peerRefreshInterval time.Duration
 
 	// Testing hook
 	resolvedCallback func()
@@ -85,11 +88,13 @@ func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits) *proce
 		resolveChan:             make(chan resolvedEvent),
 		updateLimitChan:         make(chan updateLimitEvent),
 		rateCountersRequestChan: make(chan rateCountersRequest),
+		newPeerChan:             make(chan route.Vertex),
 		chanMap:                 make(map[uint64]*channel),
 		aliasMap:                make(map[route.Vertex]string),
 		peerCtrls:               make(map[route.Vertex]*peerController),
 		limits:                  limits,
 		burstSize:               burstSize,
+		peerRefreshInterval:     defaultPeerRefreshInterval,
 	}
 }
 
@@ -165,10 +170,48 @@ func (p *process) Run(ctx context.Context) error {
 	})
 
 	group.Go(func() error {
+		return p.peerRefreshLoop(ctx)
+	})
+
+	group.Go(func() error {
 		return p.eventLoop(ctx)
 	})
 
 	return group.Wait()
+}
+
+func (p *process) peerRefreshLoop(ctx context.Context) error {
+	notifiedPeers := make(map[route.Vertex]struct{})
+
+	for {
+		// Get all peers.
+		channels, err := p.client.listChannels()
+		if err != nil {
+			return err
+		}
+
+		// Notify the main event loop of the new ones.
+		for _, ch := range channels {
+			if _, ok := notifiedPeers[ch.peer]; ok {
+				continue
+			}
+
+			notifiedPeers[ch.peer] = struct{}{}
+
+			select {
+			case p.newPeerChan <- ch.peer:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+
+		// Poll delay.
+		select {
+		case <-time.After(p.peerRefreshInterval):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 func (p *process) getPeerController(ctx context.Context, peer route.Vertex,
@@ -327,6 +370,14 @@ func (p *process) eventLoop(ctx context.Context) error {
 
 		case <-ctx.Done():
 			return ctx.Err()
+
+		// A new or existing peer has been reported.
+		case newPeer := <-p.newPeerChan:
+			p.log.Infow("New peer notification received", "peer", newPeer)
+
+			// Try to get the existing peer controller. If it doesn't exist, it
+			// will be created. This causes the peer to be reported over grpc.
+			_ = p.getPeerController(ctx, newPeer, group.Go)
 		}
 	}
 }
