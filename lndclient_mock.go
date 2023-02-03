@@ -9,17 +9,26 @@ import (
 
 var mockIdentity = route.Vertex{1, 2, 3}
 
+var testChannels = map[uint64]*channel{
+	2: {peer: route.Vertex{2}},
+	3: {peer: route.Vertex{3}, initiator: true},
+}
+
 type lndclientMock struct {
 	htlcEvents               chan *resolvedEvent
 	htlcInterceptorRequests  chan *interceptedEvent
 	htlcInterceptorResponses chan *interceptResponse
+
+	channels map[uint64]*channel
 }
 
-func newLndclientMock() *lndclientMock {
+func newLndclientMock(channels map[uint64]*channel) *lndclientMock {
 	return &lndclientMock{
 		htlcEvents:               make(chan *resolvedEvent),
 		htlcInterceptorRequests:  make(chan *interceptedEvent),
 		htlcInterceptorResponses: make(chan *interceptResponse),
+
+		channels: channels,
 	}
 }
 
@@ -28,10 +37,7 @@ func (l *lndclientMock) getIdentity() (route.Vertex, error) {
 }
 
 func (l *lndclientMock) listChannels() (map[uint64]*channel, error) {
-	return map[uint64]*channel{
-		2: {peer: route.Vertex{2}},
-		3: {peer: route.Vertex{3}, initiator: true},
-	}, nil
+	return l.channels, nil
 }
 
 func (l *lndclientMock) subscribeHtlcEvents(ctx context.Context) (
@@ -61,6 +67,10 @@ func (l *lndclientMock) getPendingIncomingHtlcs(ctx context.Context, peer *route
 	map[route.Vertex]map[circuitKey]struct{}, error) {
 
 	htlcs := make(map[route.Vertex]map[circuitKey]struct{})
+
+	for _, ch := range l.channels {
+		htlcs[ch.peer] = map[circuitKey]struct{}{}
+	}
 
 	return htlcs, nil
 }

@@ -33,7 +33,7 @@ const (
 )
 
 func testProcess(t *testing.T, event resolveEvent) {
-	client := newLndclientMock()
+	client := newLndclientMock(testChannels)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -124,7 +124,7 @@ func testRateLimit(t *testing.T, mode Mode) {
 		},
 	}
 
-	client := newLndclientMock()
+	client := newLndclientMock(testChannels)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -213,7 +213,7 @@ func testMaxPending(t *testing.T, mode Mode) {
 		},
 	}
 
-	client := newLndclientMock()
+	client := newLndclientMock(testChannels)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
