@@ -13,7 +13,6 @@ import (
 
 var (
 	rpcTimeout = 10 * time.Second
-	ctxb       = context.Background()
 )
 
 const burstSize = 10

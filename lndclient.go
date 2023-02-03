@@ -24,6 +24,8 @@ var (
 	maxMsgRecvSize = grpc.MaxCallRecvMsgSize(1 * 1024 * 1024 * 200)
 
 	ErrNodeNotFound = errors.New("node info not available")
+
+	ctxb = context.Background()
 )
 
 type lndclientGrpc struct {
