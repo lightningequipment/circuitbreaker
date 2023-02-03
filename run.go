@@ -42,6 +42,12 @@ func run(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		err := db.Close()
+		if err != nil {
+			log.Errorw("Error closing db", "err", err)
+		}
+	}()
 
 	stub := c.Bool(stubFlag.Name)
 	var client lndclient
