@@ -135,7 +135,7 @@ func main() {
 
 	app.Action = run
 
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(os.Args); err != nil && err != errUserExit {
 		log.Errorw("Unexpected exit", "err", err)
 	}
 }
