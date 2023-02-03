@@ -24,6 +24,8 @@ var (
 	maxMsgRecvSize = grpc.MaxCallRecvMsgSize(1 * 1024 * 1024 * 200)
 
 	ErrNodeNotFound = errors.New("node info not available")
+
+	ctxb = context.Background()
 )
 
 type lndclientGrpc struct {
@@ -205,8 +207,6 @@ type channel struct {
 func (l *lndclientGrpc) listChannels() (map[uint64]*channel, error) {
 	ctx, cancel := context.WithTimeout(ctxb, rpcTimeout)
 	defer cancel()
-
-	l.log.Debugw("Retrieving channels")
 
 	resp, err := l.main.ListChannels(ctx, &lnrpc.ListChannelsRequest{})
 	if err != nil {

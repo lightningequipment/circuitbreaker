@@ -7,7 +7,7 @@ import (
 
 	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestProcess(t *testing.T) {
@@ -33,12 +33,11 @@ const (
 )
 
 func testProcess(t *testing.T, event resolveEvent) {
-	client := newLndclientMock()
+	client := newLndclientMock(testChannels)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	log, err := zap.NewDevelopment()
-	require.NoError(t, err)
+	log := zaptest.NewLogger(t).Sugar()
 
 	cfg := &Limits{
 		PerPeer: map[route.Vertex]Limit{
@@ -53,7 +52,7 @@ func testProcess(t *testing.T, event resolveEvent) {
 		},
 	}
 
-	p := NewProcess(client, log.Sugar(), cfg)
+	p := NewProcess(client, log, cfg)
 
 	resolved := make(chan struct{})
 	p.resolvedCallback = func() {
@@ -124,14 +123,13 @@ func testRateLimit(t *testing.T, mode Mode) {
 		},
 	}
 
-	client := newLndclientMock()
+	client := newLndclientMock(testChannels)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	log, err := zap.NewDevelopment()
-	require.NoError(t, err)
+	log := zaptest.NewLogger(t).Sugar()
 
-	p := NewProcess(client, log.Sugar(), cfg)
+	p := NewProcess(client, log, cfg)
 	p.burstSize = 2
 
 	exit := make(chan error)
@@ -213,14 +211,13 @@ func testMaxPending(t *testing.T, mode Mode) {
 		},
 	}
 
-	client := newLndclientMock()
+	client := newLndclientMock(testChannels)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	log, err := zap.NewDevelopment()
-	require.NoError(t, err)
+	log := zaptest.NewLogger(t).Sugar()
 
-	p := NewProcess(client, log.Sugar(), cfg)
+	p := NewProcess(client, log, cfg)
 	p.burstSize = 2
 
 	exit := make(chan error)
@@ -263,6 +260,47 @@ func testMaxPending(t *testing.T, mode Mode) {
 		resp = <-client.htlcInterceptorResponses
 		require.False(t, resp.resume)
 	}
+
+	cancel()
+	require.ErrorIs(t, <-exit, context.Canceled)
+}
+
+func TestNewPeer(t *testing.T) {
+	// Initialize lnd with test channels.
+	client := newLndclientMock(testChannels)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	log := zaptest.NewLogger(t).Sugar()
+
+	cfg := &Limits{}
+
+	p := NewProcess(client, log, cfg)
+
+	// Setup quick peer refresh.
+	p.peerRefreshInterval = 100 * time.Millisecond
+
+	exit := make(chan error)
+	go func() {
+		exit <- p.Run(ctx)
+	}()
+
+	state, err := p.getRateCounters(ctx)
+	require.NoError(t, err)
+	require.Len(t, state, 2)
+
+	// Add a new peer.
+	log.Infow("Add a new peer")
+	client.channels[100] = &channel{peer: route.Vertex{100}}
+
+	// Wait for the peer to be reported.
+	require.Eventually(t, func() bool {
+		state, err := p.getRateCounters(ctx)
+		require.NoError(t, err)
+
+		return len(state) == 3
+	}, time.Second, 100*time.Millisecond)
 
 	cancel()
 	require.ErrorIs(t, <-exit, context.Canceled)

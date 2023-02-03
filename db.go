@@ -58,6 +58,10 @@ func NewDb(dbPath string) (*Db, error) {
 	}, nil
 }
 
+func (d *Db) Close() error {
+	return d.db.Close()
+}
+
 type Limit struct {
 	MaxHourlyRate int64
 	MaxPending    int64

@@ -3,11 +3,14 @@ package main
 import (
 	"context"
 	"embed"
+	"errors"
 	"io/fs"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -19,6 +22,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 )
+
+var errUserExit = errors.New("user requested termination")
 
 //go:embed webui-build
 var content embed.FS
@@ -42,6 +47,12 @@ func run(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		err := db.Close()
+		if err != nil {
+			log.Errorw("Error closing db", "err", err)
+		}
+	}()
 
 	stub := c.Bool(stubFlag.Name)
 	var client lndclient
@@ -175,6 +186,21 @@ func run(c *cli.Context) error {
 		grpcServer.Stop()
 
 		return nil
+	})
+
+	group.Go(func() error {
+		log.Infof("Press ctrl-c to exit")
+
+		sigint := make(chan os.Signal, 1)
+		signal.Notify(sigint, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+
+		select {
+		case <-sigint:
+			return errUserExit
+
+		case <-ctx.Done():
+			return nil
+		}
 	})
 
 	return group.Wait()
