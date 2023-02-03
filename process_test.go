@@ -7,7 +7,6 @@ import (
 
 	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 )
 
@@ -38,8 +37,7 @@ func testProcess(t *testing.T, event resolveEvent) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	log, err := zap.NewDevelopment()
-	require.NoError(t, err)
+	log := zaptest.NewLogger(t).Sugar()
 
 	cfg := &Limits{
 		PerPeer: map[route.Vertex]Limit{
@@ -54,7 +52,7 @@ func testProcess(t *testing.T, event resolveEvent) {
 		},
 	}
 
-	p := NewProcess(client, log.Sugar(), cfg)
+	p := NewProcess(client, log, cfg)
 
 	resolved := make(chan struct{})
 	p.resolvedCallback = func() {
@@ -129,10 +127,9 @@ func testRateLimit(t *testing.T, mode Mode) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	log, err := zap.NewDevelopment()
-	require.NoError(t, err)
+	log := zaptest.NewLogger(t).Sugar()
 
-	p := NewProcess(client, log.Sugar(), cfg)
+	p := NewProcess(client, log, cfg)
 	p.burstSize = 2
 
 	exit := make(chan error)
@@ -218,10 +215,9 @@ func testMaxPending(t *testing.T, mode Mode) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	log, err := zap.NewDevelopment()
-	require.NoError(t, err)
+	log := zaptest.NewLogger(t).Sugar()
 
-	p := NewProcess(client, log.Sugar(), cfg)
+	p := NewProcess(client, log, cfg)
 	p.burstSize = 2
 
 	exit := make(chan error)
