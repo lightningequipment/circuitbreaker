@@ -21,6 +21,7 @@ import "primeicons/primeicons.css";                                //icons
 import moment, { HTML5_FMT } from 'moment';
 
 function App() {
+  const [info, setInfo] = useState([]);
   const [data, setData] = useState([]);
   const [defaultLimits, setDefaultLimits] = useState([]);
   const [dynamicColumns, setDynamicColumns] = useState();
@@ -31,6 +32,15 @@ function App() {
 
   const fetchData = async () => {
     try {
+      const infoResponse = await fetch("/api/info");
+      const infoJson = await infoResponse.json();
+      setInfo([
+        { key: "version", value: infoJson.version },
+        { key: "node key", value: infoJson.nodeKey },
+        { key: "node alias", value: infoJson.nodeAlias },
+        { key: "node version", value: infoJson.nodeVersion }
+      ]);
+
       const response = await fetch("/api/limits");
       const json = await response.json();
 
@@ -280,7 +290,13 @@ function App() {
     <Card title="Circuit Breaker">
       <Tooltip ref={tooltipRef} target=".custom-tooltip"></Tooltip>
 
-      <h3>Default limit</h3>
+      <h3>Configuration</h3>
+      <DataTable value={info} size="small">
+        <Column field="key" header="Key"></Column>
+        <Column field="value" header="Value"></Column>
+      </DataTable>
+
+      <h3 style={{ paddingTop: '2rem' }}>Default limit</h3>
       <DataTable value={defaultLimits} editMode="row" onRowEditComplete={onDefaultLimitEditComplete} size="small" onRowEditInit={() => defaultTableEditing.current = true} onRowEditCancel={() => defaultTableEditing.current = false} onRowEditSave={() => defaultTableEditing.current = false}>
         <Column header="Max Hourly Rate" field="maxHourlyRate" body={(rowData => numberBodyTemplate(rowData.mode, rowData.maxHourlyRate))} editor={(options) => textEditor(options)}></Column>
         <Column header="Max Pending" field="maxPending" body={(rowData => numberBodyTemplate(rowData.mode, rowData.maxPending))} editor={(options) => textEditor(options)}></Column>

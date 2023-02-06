@@ -61,13 +61,17 @@ func (s *server) GetInfo(ctx context.Context,
 	req *circuitbreakerrpc.GetInfoRequest) (*circuitbreakerrpc.GetInfoResponse,
 	error) {
 
-	key, err := s.lnd.getIdentity()
+	info, err := s.lnd.getInfo()
 	if err != nil {
 		return nil, err
 	}
 
 	return &circuitbreakerrpc.GetInfoResponse{
-		ConnectedNode: hex.EncodeToString(key[:]),
+		NodeKey:     hex.EncodeToString(info.nodeKey[:]),
+		NodeVersion: info.version,
+		NodeAlias:   info.alias,
+
+		Version: BuildVersion,
 	}, nil
 }
 

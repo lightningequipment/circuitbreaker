@@ -187,16 +187,31 @@ func NewLndClient(cfg *LndConfig) (*lndclientGrpc, error) {
 	}, nil
 }
 
-func (l *lndclientGrpc) getIdentity() (route.Vertex, error) {
+type info struct {
+	nodeKey route.Vertex
+	alias   string
+	version string
+}
+
+func (l *lndclientGrpc) getInfo() (*info, error) {
 	ctx, cancel := context.WithTimeout(ctxb, rpcTimeout)
 	defer cancel()
 
-	info, err := l.main.GetInfo(ctx, &lnrpc.GetInfoRequest{})
+	infoResp, err := l.main.GetInfo(ctx, &lnrpc.GetInfoRequest{})
 	if err != nil {
-		return route.Vertex{}, err
+		return nil, err
 	}
 
-	return route.NewVertexFromStr(info.IdentityPubkey)
+	nodeKey, err := route.NewVertexFromStr(infoResp.IdentityPubkey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &info{
+		nodeKey: nodeKey,
+		alias:   infoResp.Alias,
+		version: infoResp.Version,
+	}, nil
 }
 
 type channel struct {

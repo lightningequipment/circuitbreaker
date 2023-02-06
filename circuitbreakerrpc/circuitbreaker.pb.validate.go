@@ -106,7 +106,13 @@ func (m *GetInfoResponse) Validate() error {
 		return nil
 	}
 
-	// no validation rules for ConnectedNode
+	// no validation rules for NodeKey
+
+	// no validation rules for NodeAlias
+
+	// no validation rules for NodeVersion
+
+	// no validation rules for Version
 
 	return nil
 }
