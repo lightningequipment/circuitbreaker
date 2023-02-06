@@ -215,8 +215,12 @@ func (s *stubLndClient) generateHtlcs(key route.Vertex, peer *stubPeer) {
 	}
 }
 
-func (s *stubLndClient) getIdentity() (route.Vertex, error) {
-	return route.Vertex{1, 2, 3}, nil
+func (s *stubLndClient) getInfo() (*info, error) {
+	return &info{
+		nodeKey: route.Vertex{1, 2, 3},
+		version: "v1.0.0",
+		alias:   "fake",
+	}, nil
 }
 
 func (s *stubLndClient) listChannels() (map[uint64]*channel, error) {

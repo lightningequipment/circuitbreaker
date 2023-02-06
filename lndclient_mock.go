@@ -32,8 +32,10 @@ func newLndclientMock(channels map[uint64]*channel) *lndclientMock {
 	}
 }
 
-func (l *lndclientMock) getIdentity() (route.Vertex, error) {
-	return mockIdentity, nil
+func (l *lndclientMock) getInfo() (*info, error) {
+	return &info{
+		nodeKey: mockIdentity,
+	}, nil
 }
 
 func (l *lndclientMock) listChannels() (map[uint64]*channel, error) {

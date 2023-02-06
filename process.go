@@ -19,7 +19,7 @@ var (
 const burstSize = 10
 
 type lndclient interface {
-	getIdentity() (route.Vertex, error)
+	getInfo() (*info, error)
 
 	listChannels() (map[uint64]*channel, error)
 
@@ -127,12 +127,11 @@ func (p *process) UpdateLimit(ctx context.Context, peer *route.Vertex,
 func (p *process) Run(ctx context.Context) error {
 	p.log.Info("CircuitBreaker started")
 
-	var err error
-
-	p.identity, err = p.client.getIdentity()
+	info, err := p.client.getInfo()
 	if err != nil {
 		return err
 	}
+	p.identity = info.nodeKey
 
 	p.log.Infow("Connected to lnd node",
 		"pubkey", p.identity.String())

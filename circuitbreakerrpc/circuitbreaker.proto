@@ -44,7 +44,11 @@ service Service {
 message GetInfoRequest {}
 
 message GetInfoResponse {
-    string connected_node = 1;
+    string node_key = 1;
+    string node_alias = 2;
+    string node_version = 3;
+    
+    string version = 4;
 }
 
 enum Mode {
