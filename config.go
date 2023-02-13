@@ -6,6 +6,7 @@ const (
 	ModeFail Mode = iota
 	ModeQueue
 	ModeQueuePeerInitiated
+	ModeBlock
 )
 
 func (m Mode) String() string {
@@ -18,6 +19,9 @@ func (m Mode) String() string {
 
 	case ModeQueuePeerInitiated:
 		return "QUEUE_PEER_INITIATED"
+
+	case ModeBlock:
+		return "BLOCK"
 
 	default:
 		panic("unknown mode")

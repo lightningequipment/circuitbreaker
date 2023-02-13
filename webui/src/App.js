@@ -199,7 +199,8 @@ function App() {
   const modes = [
     { label: 'Fail', value: 'MODE_FAIL' },
     { label: 'Queue', value: 'MODE_QUEUE' },
-    { label: 'Queue peer initiated', value: 'MODE_QUEUE_PEER_INITIATED' }
+    { label: 'Queue peer initiated', value: 'MODE_QUEUE_PEER_INITIATED' },
+    { label: 'Block', value: 'MODE_BLOCK' }
   ];
 
   const modesWithUseDefault = [...modes, { label: 'Use default', value: 'MODE_DEFAULT' }]
@@ -228,6 +229,10 @@ function App() {
 
       case 'MODE_QUEUE_PEER_INITIATED':
         mode = 'Queue peer initiated'
+        break;
+
+      case 'MODE_BLOCK':
+        mode = 'Block'
         break;
 
       case 'MODE_DEFAULT':

@@ -91,6 +91,9 @@ func unmarshalLimit(rpcLimit *circuitbreakerrpc.Limit) (Limit, error) {
 	case circuitbreakerrpc.Mode_MODE_QUEUE_PEER_INITIATED:
 		limit.Mode = ModeQueuePeerInitiated
 
+	case circuitbreakerrpc.Mode_MODE_BLOCK:
+		limit.Mode = ModeBlock
+
 	default:
 		return Limit{}, errors.New("unknown mode")
 	}
@@ -198,6 +201,9 @@ func marshalLimit(limit Limit) (*circuitbreakerrpc.Limit, error) {
 
 	case ModeQueuePeerInitiated:
 		rpcLimit.Mode = circuitbreakerrpc.Mode_MODE_QUEUE_PEER_INITIATED
+
+	case ModeBlock:
+		rpcLimit.Mode = circuitbreakerrpc.Mode_MODE_BLOCK
 
 	default:
 		return nil, errors.New("unknown mode")

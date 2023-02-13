@@ -276,7 +276,14 @@ func (p *peerController) run(ctx context.Context) error {
 				continue
 			}
 
+			mode := p.cfg.Mode
+
 			switch {
+			// Don't check limits in block mode and move onwards to failing the
+			// htlc.
+			case mode == ModeBlock:
+				logger.Infow("Htlc blocked")
+
 			// If there is a queue, then don't jump the queue.
 			case queue.Len() > 0:
 
@@ -284,20 +291,20 @@ func (p *peerController) run(ctx context.Context) error {
 			case !newHtlcAllowed:
 				logger.Infow("Pending htlc limit exceeded")
 
-			// Check the rate limit and forward immediately if allowed.
-			case p.limiter.Allow():
+			// Check the rate limit.
+			case !p.limiter.Allow():
+				logger.Infow("Rate limit exceeded")
+
+			// All signs green, forward the htlc.
+			default:
 				if err := p.forward(event.interceptEvent); err != nil {
 					return err
 				}
 
 				continue
-
-			default:
-				logger.Infow("Rate limit exceeded")
 			}
 
 			// Queue if in one of the queue modes.
-			mode := p.cfg.Mode
 			if mode == ModeQueue ||
 				(mode == ModeQueuePeerInitiated && event.peerInitiated) {
 
