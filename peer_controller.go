@@ -279,6 +279,11 @@ func (p *peerController) run(ctx context.Context) error {
 			mode := p.cfg.Mode
 
 			switch {
+			// Don't check limits in block mode and move onwards to failing the
+			// htlc.
+			case mode == ModeBlock:
+				logger.Infow("Htlc blocked")
+
 			// If there is a queue, then don't jump the queue.
 			case queue.Len() > 0:
 

@@ -305,3 +305,47 @@ func TestNewPeer(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, <-exit, context.Canceled)
 }
+
+func TestBlocked(t *testing.T) {
+	defer Timeout()()
+
+	cfg := &Limits{
+		PerPeer: map[route.Vertex]Limit{
+			{2}: {
+				MaxHourlyRate: 1800,
+				Mode:          ModeBlock,
+			},
+		},
+	}
+
+	client := newLndclientMock(testChannels)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	log := zaptest.NewLogger(t).Sugar()
+
+	p := NewProcess(client, log, cfg)
+
+	exit := make(chan error)
+	go func() {
+		exit <- p.Run(ctx)
+	}()
+
+	var chanId uint64 = 2
+
+	key := circuitKey{
+		channel: chanId,
+		htlc:    5,
+	}
+	interceptReq := &interceptedEvent{
+		circuitKey: key,
+	}
+
+	// Htlc blocked.
+	client.htlcInterceptorRequests <- interceptReq
+	resp := <-client.htlcInterceptorResponses
+	require.False(t, resp.resume)
+
+	cancel()
+	require.ErrorIs(t, <-exit, context.Canceled)
+}

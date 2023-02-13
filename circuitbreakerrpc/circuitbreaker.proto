@@ -55,8 +55,8 @@ enum Mode {
     MODE_FAIL = 0;
     MODE_QUEUE = 1;
     MODE_QUEUE_PEER_INITIATED = 2;
+    MODE_BLOCK = 3;
 }
-
 
 message ClearLimitRequest {
     string node = 1;

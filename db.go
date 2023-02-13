@@ -30,6 +30,26 @@ var migrations = &migrate.MemoryMigrationSource{
 				`,
 			},
 		},
+		{
+			Id: "2",
+			Up: []string{
+				`
+				ALTER TABLE limits RENAME TO limits_old;
+
+				CREATE TABLE IF NOT EXISTS limits (
+					peer TEXT PRIMARY KEY NOT NULL,
+					htlc_max_pending INTEGER NOT NULL,
+					htlc_max_hourly_rate INTEGER NOT NULL,
+					mode TEXT CHECK(mode IN ('FAIL', 'QUEUE', 'QUEUE_PEER_INITIATED', 'BLOCK')) NOT NULL DEFAULT 'FAIL'
+				);
+
+				INSERT INTO limits(peer, htlc_max_pending, htlc_max_hourly_rate, mode)
+					SELECT peer, htlc_max_pending, htlc_max_hourly_rate, mode FROM limits_old;
+
+				DROP TABLE limits_old;
+				`,
+			},
+		},
 	},
 }
 
@@ -137,6 +157,9 @@ func (d *Db) GetLimits(ctx context.Context) (*Limits, error) {
 
 		case "QUEUE_PEER_INITIATED":
 			limit.Mode = ModeQueuePeerInitiated
+
+		case "BLOCK":
+			limit.Mode = ModeBlock
 
 		default:
 			return nil, errors.New("unknown mode")
