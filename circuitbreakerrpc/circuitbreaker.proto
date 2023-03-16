@@ -13,17 +13,18 @@ service Service {
         };
     }
 
-    rpc UpdateLimit (UpdateLimitRequest) returns (UpdateLimitResponse) {
+    rpc UpdateLimits (UpdateLimitsRequest) returns (UpdateLimitsResponse) {
         option (google.api.http) = {
-            post: "/updatelimit/{node}"
+            post: "/updatelimits"
             body: "*"
         };
     }
 
-    // Clear specific limit and use default.
-    rpc ClearLimit (ClearLimitRequest) returns (ClearLimitResponse) {
+    // Clear specific limits and use default.
+    rpc ClearLimits (ClearLimitsRequest) returns (ClearLimitsResponse) {
         option (google.api.http) = {
-            post: "/clearlimit/{node}"
+            post: "/clearlimits"
+            body: "*"
         };
     }
 
@@ -58,19 +59,17 @@ enum Mode {
     MODE_BLOCK = 3;
 }
 
-message ClearLimitRequest {
-    string node = 1;
+message ClearLimitsRequest {
+    repeated string nodes = 1;
 }
 
-message ClearLimitResponse {}
+message ClearLimitsResponse {}
 
-message UpdateLimitRequest {
-    string node = 1;
-    Limit limit = 2;
+message UpdateLimitsRequest {
+    map<string, Limit> limits = 1;
 }
 
-message UpdateLimitResponse {}
-
+message UpdateLimitsResponse {}
 
 message UpdateDefaultLimitRequest {
     Limit limit = 1;
