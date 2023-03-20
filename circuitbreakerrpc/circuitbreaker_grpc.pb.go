@@ -19,9 +19,9 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ServiceClient interface {
 	GetInfo(ctx context.Context, in *GetInfoRequest, opts ...grpc.CallOption) (*GetInfoResponse, error)
-	UpdateLimit(ctx context.Context, in *UpdateLimitRequest, opts ...grpc.CallOption) (*UpdateLimitResponse, error)
-	// Clear specific limit and use default.
-	ClearLimit(ctx context.Context, in *ClearLimitRequest, opts ...grpc.CallOption) (*ClearLimitResponse, error)
+	UpdateLimits(ctx context.Context, in *UpdateLimitsRequest, opts ...grpc.CallOption) (*UpdateLimitsResponse, error)
+	// Clear specific limits and use default.
+	ClearLimits(ctx context.Context, in *ClearLimitsRequest, opts ...grpc.CallOption) (*ClearLimitsResponse, error)
 	UpdateDefaultLimit(ctx context.Context, in *UpdateDefaultLimitRequest, opts ...grpc.CallOption) (*UpdateDefaultLimitResponse, error)
 	ListLimits(ctx context.Context, in *ListLimitsRequest, opts ...grpc.CallOption) (*ListLimitsResponse, error)
 }
@@ -43,18 +43,18 @@ func (c *serviceClient) GetInfo(ctx context.Context, in *GetInfoRequest, opts ..
 	return out, nil
 }
 
-func (c *serviceClient) UpdateLimit(ctx context.Context, in *UpdateLimitRequest, opts ...grpc.CallOption) (*UpdateLimitResponse, error) {
-	out := new(UpdateLimitResponse)
-	err := c.cc.Invoke(ctx, "/circuitbreaker.Service/UpdateLimit", in, out, opts...)
+func (c *serviceClient) UpdateLimits(ctx context.Context, in *UpdateLimitsRequest, opts ...grpc.CallOption) (*UpdateLimitsResponse, error) {
+	out := new(UpdateLimitsResponse)
+	err := c.cc.Invoke(ctx, "/circuitbreaker.Service/UpdateLimits", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *serviceClient) ClearLimit(ctx context.Context, in *ClearLimitRequest, opts ...grpc.CallOption) (*ClearLimitResponse, error) {
-	out := new(ClearLimitResponse)
-	err := c.cc.Invoke(ctx, "/circuitbreaker.Service/ClearLimit", in, out, opts...)
+func (c *serviceClient) ClearLimits(ctx context.Context, in *ClearLimitsRequest, opts ...grpc.CallOption) (*ClearLimitsResponse, error) {
+	out := new(ClearLimitsResponse)
+	err := c.cc.Invoke(ctx, "/circuitbreaker.Service/ClearLimits", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -84,9 +84,9 @@ func (c *serviceClient) ListLimits(ctx context.Context, in *ListLimitsRequest, o
 // for forward compatibility
 type ServiceServer interface {
 	GetInfo(context.Context, *GetInfoRequest) (*GetInfoResponse, error)
-	UpdateLimit(context.Context, *UpdateLimitRequest) (*UpdateLimitResponse, error)
-	// Clear specific limit and use default.
-	ClearLimit(context.Context, *ClearLimitRequest) (*ClearLimitResponse, error)
+	UpdateLimits(context.Context, *UpdateLimitsRequest) (*UpdateLimitsResponse, error)
+	// Clear specific limits and use default.
+	ClearLimits(context.Context, *ClearLimitsRequest) (*ClearLimitsResponse, error)
 	UpdateDefaultLimit(context.Context, *UpdateDefaultLimitRequest) (*UpdateDefaultLimitResponse, error)
 	ListLimits(context.Context, *ListLimitsRequest) (*ListLimitsResponse, error)
 	mustEmbedUnimplementedServiceServer()
@@ -99,11 +99,11 @@ type UnimplementedServiceServer struct {
 func (UnimplementedServiceServer) GetInfo(context.Context, *GetInfoRequest) (*GetInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetInfo not implemented")
 }
-func (UnimplementedServiceServer) UpdateLimit(context.Context, *UpdateLimitRequest) (*UpdateLimitResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateLimit not implemented")
+func (UnimplementedServiceServer) UpdateLimits(context.Context, *UpdateLimitsRequest) (*UpdateLimitsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateLimits not implemented")
 }
-func (UnimplementedServiceServer) ClearLimit(context.Context, *ClearLimitRequest) (*ClearLimitResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ClearLimit not implemented")
+func (UnimplementedServiceServer) ClearLimits(context.Context, *ClearLimitsRequest) (*ClearLimitsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ClearLimits not implemented")
 }
 func (UnimplementedServiceServer) UpdateDefaultLimit(context.Context, *UpdateDefaultLimitRequest) (*UpdateDefaultLimitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateDefaultLimit not implemented")
@@ -142,38 +142,38 @@ func _Service_GetInfo_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Service_UpdateLimit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateLimitRequest)
+func _Service_UpdateLimits_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateLimitsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ServiceServer).UpdateLimit(ctx, in)
+		return srv.(ServiceServer).UpdateLimits(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/circuitbreaker.Service/UpdateLimit",
+		FullMethod: "/circuitbreaker.Service/UpdateLimits",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ServiceServer).UpdateLimit(ctx, req.(*UpdateLimitRequest))
+		return srv.(ServiceServer).UpdateLimits(ctx, req.(*UpdateLimitsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Service_ClearLimit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ClearLimitRequest)
+func _Service_ClearLimits_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearLimitsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ServiceServer).ClearLimit(ctx, in)
+		return srv.(ServiceServer).ClearLimits(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/circuitbreaker.Service/ClearLimit",
+		FullMethod: "/circuitbreaker.Service/ClearLimits",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ServiceServer).ClearLimit(ctx, req.(*ClearLimitRequest))
+		return srv.(ServiceServer).ClearLimits(ctx, req.(*ClearLimitsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -226,12 +226,12 @@ var Service_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Service_GetInfo_Handler,
 		},
 		{
-			MethodName: "UpdateLimit",
-			Handler:    _Service_UpdateLimit_Handler,
+			MethodName: "UpdateLimits",
+			Handler:    _Service_UpdateLimits_Handler,
 		},
 		{
-			MethodName: "ClearLimit",
-			Handler:    _Service_ClearLimit_Handler,
+			MethodName: "ClearLimits",
+			Handler:    _Service_ClearLimits_Handler,
 		},
 		{
 			MethodName: "UpdateDefaultLimit",

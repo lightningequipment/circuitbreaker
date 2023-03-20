@@ -163,10 +163,13 @@ function App() {
     if (newData.mode == 'MODE_DEFAULT') {
       const requestOptions = {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodes: [newData.node],
+        })
       };
 
-      fetch('/api/clearlimit/' + newData.node, requestOptions)
+      fetch('/api/clearlimits', requestOptions)
         .then(response => response.json())
         .then(data => {
           console.log(data)
@@ -178,15 +181,17 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          limit: {
-            maxHourlyRate: newData.maxHourlyRate,
-            maxPending: newData.maxPending,
-            mode: newData.mode
-          }
+          limits: {
+            [newData.node]: {
+              maxHourlyRate: newData.maxHourlyRate,
+              maxPending: newData.maxPending,
+              mode: newData.mode
+            },
+          },
         })
       };
 
-      fetch('/api/updatelimit/' + newData.node, requestOptions)
+      fetch('/api/updatelimits', requestOptions)
         .then(response => response.json())
         .then(data => {
           console.log(data)

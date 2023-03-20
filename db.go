@@ -60,7 +60,11 @@ type Db struct {
 }
 
 func NewDb(dbPath string) (*Db, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	const busyTimeoutMs = 5000
+
+	dsn := dbPath + fmt.Sprintf("?_pragma=busy_timeout=%d", busyTimeoutMs)
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
