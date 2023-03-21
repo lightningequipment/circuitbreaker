@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
@@ -101,65 +102,77 @@ func unmarshalLimit(rpcLimit *circuitbreakerrpc.Limit) (Limit, error) {
 	return limit, nil
 }
 
-func (s *server) UpdateLimit(ctx context.Context,
-	req *circuitbreakerrpc.UpdateLimitRequest) (
-	*circuitbreakerrpc.UpdateLimitResponse, error) {
+func (s *server) UpdateLimits(ctx context.Context,
+	req *circuitbreakerrpc.UpdateLimitsRequest) (
+	*circuitbreakerrpc.UpdateLimitsResponse, error) {
 
-	node, err := route.NewVertexFromStr(req.Node)
-	if err != nil {
-		return nil, err
+	// Parse and validate request.
+	limits := make(map[route.Vertex]Limit)
+	for nodeStr, rpcLimit := range req.Limits {
+		node, err := route.NewVertexFromStr(nodeStr)
+		if err != nil {
+			return nil, err
+		}
+
+		if node == defaultNodeKey {
+			return nil, fmt.Errorf("set default limit for %v through "+
+				"UpdateDefaultLimit", node)
+		}
+
+		if rpcLimit == nil {
+			return nil, fmt.Errorf("no limit specified for %v", node)
+		}
+
+		limit, err := unmarshalLimit(rpcLimit)
+		if err != nil {
+			return nil, err
+		}
+
+		limits[node] = limit
 	}
 
-	if node == defaultNodeKey {
-		return nil, errors.New("set default limit through UpdateDefaultLimit")
+	// Apply limits.
+	for node, limit := range limits {
+		node, limit := node, limit
+
+		s.log.Infow("Updating limit", "node", node, "limit", limit)
+
+		if err := s.db.UpdateLimit(ctx, node, limit); err != nil {
+			return nil, err
+		}
+
+		if err := s.process.UpdateLimit(ctx, &node, &limit); err != nil {
+			return nil, err
+		}
 	}
 
-	if req.Limit == nil {
-		return nil, errors.New("no limit specified")
-	}
-
-	limit, err := unmarshalLimit(req.Limit)
-	if err != nil {
-		return nil, err
-	}
-
-	s.log.Infow("Updating limit", "node", node, "limit", limit)
-
-	err = s.db.UpdateLimit(ctx, node, limit)
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.process.UpdateLimit(ctx, &node, &limit)
-	if err != nil {
-		return nil, err
-	}
-
-	return &circuitbreakerrpc.UpdateLimitResponse{}, nil
+	return &circuitbreakerrpc.UpdateLimitsResponse{}, nil
 }
 
-func (s *server) ClearLimit(ctx context.Context,
-	req *circuitbreakerrpc.ClearLimitRequest) (
-	*circuitbreakerrpc.ClearLimitResponse, error) {
+func (s *server) ClearLimits(ctx context.Context,
+	req *circuitbreakerrpc.ClearLimitsRequest) (
+	*circuitbreakerrpc.ClearLimitsResponse, error) {
 
-	node, err := route.NewVertexFromStr(req.Node)
-	if err != nil {
-		return nil, err
+	for _, nodeStr := range req.Nodes {
+		node, err := route.NewVertexFromStr(nodeStr)
+		if err != nil {
+			return nil, err
+		}
+
+		s.log.Infow("Clearing limit", "node", node)
+
+		err = s.db.ClearLimit(ctx, node)
+		if err != nil {
+			return nil, err
+		}
+
+		err = s.process.UpdateLimit(ctx, &node, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	s.log.Infow("Clearing limit", "node", node)
-
-	err = s.db.ClearLimit(ctx, node)
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.process.UpdateLimit(ctx, &node, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return &circuitbreakerrpc.ClearLimitResponse{}, nil
+	return &circuitbreakerrpc.ClearLimitsResponse{}, nil
 }
 
 func (s *server) UpdateDefaultLimit(ctx context.Context,

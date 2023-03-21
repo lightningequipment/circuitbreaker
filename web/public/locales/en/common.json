@@ -1,0 +1,58 @@
+{
+  "cancel": "Cancel",
+  "edit": "Edit",
+  "footer": "2023 Bottlepay Ltd. All rights reserved.",
+  "edit-defaults": "Edit defaults",
+  "max-hourly-rate": "Max hourly rate",
+  "max-pending": "Max pending",
+  "mode": "Mode",
+  "save": "Save changes",
+  "unlimited": "Unlimited",
+  "use-default-values": "Use default values",
+  "blocked-description": "All traffic from this peer will be blocked completely",
+  "node-key": "Node key",
+  "node-version": "Node version",
+  "default-limit-modal": {
+    "title": "Default limits"
+  },
+  "modes": {
+    "MODE_FAIL": "Fail",
+    "MODE_QUEUE": "Queue",
+    "MODE_QUEUE_PEER_INITIATED": "Queue Peer Initiated",
+    "MODE_BLOCK": "Block"
+  },
+  "node-table": {
+    "MODE_FAIL": "Fail",
+    "MODE_QUEUE": "Queue",
+    "MODE_QUEUE_PEER_INITIATED": "Queue Peer Initiated",
+    "MODE_BLOCK": "Block",
+    "search-placeholder": "Search peer...",
+    "columns": "Columns",
+    "edit-selected": "Edit selected",
+    "alias": "Peer",
+    "default": "Default",
+    "currentFwds": "Current fwds",
+    "queueLen": "Queue Len",
+    "pendingHtlcCount": "Pending",
+    "edit-selected-nodes": "Edit selected nodes",
+    "selected-peers": "Selected peers",
+    "counter1h": {
+      "title": "1 hour counters",
+      "fail": "Fail",
+      "success": "OK",
+      "reject": "Reject"
+    },
+    "counter24h": {
+      "title": "24 hour counters",
+      "fail": "Fail",
+      "success": "OK",
+      "reject": "Reject"
+    },
+    "limit": {
+      "title": "Limits",
+      "maxPending": "Max Pending",
+      "maxHourlyRate": "Max Hourly Rate",
+      "mode": "Mode"
+    }
+  }
+}
