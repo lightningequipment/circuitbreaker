@@ -12,7 +12,7 @@ COPY webui .
 RUN npm run build
 
 ### Build backend
-FROM golang:1.18-alpine AS build_backend
+FROM golang:1.19-alpine AS build_backend
 
 ARG BUILD_VERSION
 

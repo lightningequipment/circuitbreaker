@@ -66,6 +66,7 @@ linux).
 
 * Clone this repository
 * `cd circuitbreaker/`
+* Build the frontend via docker: `./build_frontend.sh`
 * `go install`
 * Execute `circuitbreaker` with the correct command line flags to connect to
   `lnd`. See `circuitbreaker --help` for details.

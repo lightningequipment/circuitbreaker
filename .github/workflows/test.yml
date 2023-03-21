@@ -9,7 +9,7 @@ on:
 jobs:
   unit-test:
     runs-on: ubuntu-latest
-    container: golang:1.17
+    container: golang:1.19
 
     steps:
       - name: Check out repository code

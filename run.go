@@ -25,7 +25,7 @@ import (
 
 var errUserExit = errors.New("user requested termination")
 
-//go:embed webui-build
+//go:embed all:webui-build
 var content embed.FS
 
 func run(c *cli.Context) error {
