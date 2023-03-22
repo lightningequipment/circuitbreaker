@@ -5,7 +5,7 @@ import { Box } from '@mui/material';
 import { useLimits, useInfo } from 'hooks';
 import { removeLoader } from 'splashScreen';
 
-import { Header, Footer, NodeTable } from './parts';
+import { Header, NodeTable } from './parts';
 
 const Home = () => {
   const { isSuccess: isLimitsSuccess } = useLimits();
@@ -25,11 +25,11 @@ const Home = () => {
       sx={{
         height: '100dvh',
         px: { xs: 0, md: 5, xl: 10 },
+        pb: 5,
       }}
     >
       <Header />
       <NodeTable />
-      <Footer />
     </Box>
   );
 };

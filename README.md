@@ -54,7 +54,7 @@ and day on a peer-by-peer basis.
 ## How to use
 
 ### Requirements
-* `go` 1.18
+* `go` 1.19
 * `lnd` version 0.15.4-beta or above.
 
 ### Configuration
