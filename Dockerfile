@@ -4,7 +4,7 @@ FROM node:lts-alpine AS build_frontend
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY web .
-RUN yarn install --frozen-lockfile && yarn build-export
+RUN yarn install --frozen-lockfile --network-timeout 1000000 && yarn build-export
 
 ### Build backend
 FROM golang:1.19-alpine AS build_backend
