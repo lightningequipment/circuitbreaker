@@ -7,7 +7,7 @@ module.exports = {
       return [
         {
           source: '/api/:path*',
-          destination: 'http://localhost:9235/api/:path*',
+          destination: 'http://127.0.0.1:9235/api/:path*',
         },
       ];
     else return [];
