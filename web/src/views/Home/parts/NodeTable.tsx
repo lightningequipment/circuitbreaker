@@ -19,11 +19,7 @@ import {
 
 import { useLimits } from 'hooks';
 import { Checkbox, NodeAlias } from 'components';
-import {
-  FOOTER_HEIGHT,
-  HEADER_HEIGHT_DESKTOP,
-  HEADER_HEIGHT_MOBILE,
-} from 'constant';
+import { HEADER_HEIGHT_DESKTOP, HEADER_HEIGHT_MOBILE } from 'constant';
 import { Mode } from 'enums';
 
 import SearchBar from './SearchBar';
@@ -342,8 +338,8 @@ const NodeTable = () => {
         display: 'flex',
         flexDirection: 'column',
         height: {
-          xs: `calc(100dvh - ${HEADER_HEIGHT_MOBILE} - ${FOOTER_HEIGHT})`,
-          lg: `calc(100dvh - ${HEADER_HEIGHT_DESKTOP} - ${FOOTER_HEIGHT})`,
+          xs: `calc(100% - ${HEADER_HEIGHT_MOBILE})`,
+          lg: `calc(100% - ${HEADER_HEIGHT_DESKTOP})`,
         },
         backgroundColor: 'grey.50',
         borderRadius: '12px',
