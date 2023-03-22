@@ -1,0 +1,3 @@
+interface GetTranslationProps {
+  locale: string;
+}
