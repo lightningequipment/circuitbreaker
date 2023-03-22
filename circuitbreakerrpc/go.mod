@@ -1,6 +1,6 @@
 module github.com/lightningequipment/circuitbreaker/circuitbreakerrpc
 
-go 1.18
+go 1.19
 
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.1
