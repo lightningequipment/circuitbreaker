@@ -1,0 +1,17 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: #101329;
+}
+
+html,
+body,
+body > div:first-of-type,
+div#__next {
+  height: 100dvh;
+  width: 100dvw;
+  overflow: hidden;
+}

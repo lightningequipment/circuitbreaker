@@ -1,0 +1,8 @@
+jest.config.js
+next.config.js
+server.js
+babel-jest.js
+next-i18next.config.js
+
+/public
+/coverage

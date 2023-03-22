@@ -21,6 +21,19 @@ var stubNodes = []string{
 	"NordicRails",
 	"Stone Of Jordan",
 	"Mushi",
+	"Boltz",
+	"CryptoChill",
+	"ACINQ",
+	"Lightning Labs",
+	"Bottlepay",
+	"NYDIG",
+	"Bitrefill",
+	"Lightning.Watch",
+	"OpenNode",
+	"LND2",
+	"coincharge",
+	"LightningJoule",
+	"Mafia",
 }
 
 type stubChannel struct {
