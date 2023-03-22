@@ -34,6 +34,9 @@ var stubNodes = []string{
 	"coincharge",
 	"LightningJoule",
 	"Mafia",
+	"",
+	"",
+	"",
 }
 
 type stubChannel struct {
