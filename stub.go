@@ -66,9 +66,9 @@ func newStubClient() *stubLndClient {
 	pendingHtlcs := make(map[route.Vertex]map[circuitKey]struct{})
 
 	var chanId uint64 = 1
-	for _, alias := range stubNodes {
+	for i, alias := range stubNodes {
 		// Derive key.
-		hash := sha256.Sum256([]byte(alias))
+		hash := sha256.Sum256([]byte{byte(i)})
 		keySlice := append([]byte{0}, hash[:]...)
 		key, err := route.NewVertexFromBytes(keySlice)
 		if err != nil {
@@ -87,6 +87,10 @@ func newStubClient() *stubLndClient {
 			chanMap[chanId] = key
 
 			chanId++
+		}
+
+		if _, exists := peers[key]; exists {
+			panic("duplicate stub peer key")
 		}
 
 		peers[key] = &stubPeer{

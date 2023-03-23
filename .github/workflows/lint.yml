@@ -1,4 +1,4 @@
-name: golangci-lint
+name: Lint
 on:
   push:
     tags:
@@ -13,7 +13,7 @@ permissions:
   # pull-requests: read
 jobs:
   golangci:
-    name: lint
+    name: Run golangci-lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-go@v3
@@ -44,3 +44,17 @@ jobs:
 
           # Optional: if set to true then the action don't cache or restore ~/.cache/go-build.
           # skip-build-cache: true
+  web-lint:
+    runs-on: ubuntu-latest
+    name: Run lint and type check
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '19.x'
+      - run: yarn
+        working-directory: ./web
+      - run: yarn check-lint
+        working-directory: ./web
+      - run: yarn check-types
+        working-directory: ./web
