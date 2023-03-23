@@ -137,6 +137,11 @@ func main() {
 
 	if err := app.Run(os.Args); err != nil && err != errUserExit {
 		log.Errorw("Unexpected exit", "err", err)
+
+		// Return a non-zero error code. This is particularly important when
+		// running in docker-compose. A zero error code wouldn't trigger a
+		// restart.
+		os.Exit(1)
 	}
 }
 
