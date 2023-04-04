@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Function to compare version numbers
+version_greater_or_equal() {
+  printf '%s\n' "$2" "$1" | sort -V -C
+}
+
 # Function to install or update Yarn
 install_or_update_yarn() {
   if [ "$EUID" -eq 0 ]; then
@@ -21,7 +26,7 @@ else
   # Check if Yarn is installed and if the version is greater than or equal to 1.10.0
   if command -v yarn >/dev/null 2>&1; then
     YARN_VERSION=$(yarn --version)
-    if [[ $(echo "$YARN_VERSION >= 1.10.0" | bc -l) -eq 1 ]]; then
+    if version_greater_or_equal "$YARN_VERSION" "1.10.0"; then
       echo "Yarn is installed with version $YARN_VERSION"
     else
       echo "Yarn version is less than 1.10.0, updating Yarn..."
