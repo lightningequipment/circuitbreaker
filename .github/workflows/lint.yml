@@ -51,10 +51,17 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: '19.x'
+          node-version: '19.6.0'
       - run: yarn
         working-directory: ./web
       - run: yarn check-lint
         working-directory: ./web
       - run: yarn check-types
         working-directory: ./web
+      - run: yarn build-export        # Build frontend
+        working-directory: ./web
+      - run: |                        # Check for clean working dir
+          if ! git diff --exit-code; then
+            exit 1
+          fi
+
