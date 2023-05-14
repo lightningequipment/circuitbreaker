@@ -12,4 +12,6 @@ module.exports = {
       ];
     else return [];
   },
+  generateBuildId: () => 'circuitbreaker-build-id',
 };
+

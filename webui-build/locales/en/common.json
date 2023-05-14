@@ -1,0 +1,64 @@
+{
+  "cancel": "Cancel",
+  "edit": "Edit",
+  "edit-defaults": "Edit defaults",
+  "max-hourly-rate": "Max hourly rate",
+  "max-pending": "Max pending",
+  "mode": "Mode",
+  "queue-alert": "If something goes wrong in queue mode, this may lead to channel force-closes in lnd 0.15 and below",
+  "save": "Save changes",
+  "unlimited": "Unlimited",
+  "use-default-values": "Use default values",
+  "blocked-description": "All traffic from this peer will be blocked completely",
+  "node-key": "Node key",
+  "node-version": "Node version",
+  "errors": {
+    "error-updating-selected": "Error updating limit for selected peers",
+    "error-updating-default": "Error updating default limits",
+    "error-fetching-limits": "Error fetching limits data",
+    "error-fetching-info": "Error fetching node info"
+  },
+  "default-limit-modal": {
+    "title": "Default limits"
+  },
+  "modes": {
+    "MODE_FAIL": "Fail",
+    "MODE_QUEUE": "Queue",
+    "MODE_QUEUE_PEER_INITIATED": "Queue Peer Initiated",
+    "MODE_BLOCK": "Block"
+  },
+  "node-table": {
+    "MODE_FAIL": "Fail",
+    "MODE_QUEUE": "Queue",
+    "MODE_QUEUE_PEER_INITIATED": "Queue Peer Initiated",
+    "MODE_BLOCK": "Block",
+    "search-placeholder": "Search peer...",
+    "columns": "Columns",
+    "edit-selected": "Edit selected",
+    "alias": "Peer",
+    "default": "Default",
+    "currentFwds": "Current fwds",
+    "queueLen": "Queue Len",
+    "pendingHtlcCount": "Pending",
+    "edit-selected-nodes": "Edit selected nodes",
+    "selected-peers": "Selected peers",
+    "counter1h": {
+      "title": "1 hour counters",
+      "fail": "Fail",
+      "success": "OK",
+      "reject": "Reject"
+    },
+    "counter24h": {
+      "title": "24 hour counters",
+      "fail": "Fail",
+      "success": "OK",
+      "reject": "Reject"
+    },
+    "limit": {
+      "title": "Limits",
+      "maxPending": "Max Pending",
+      "maxHourlyRate": "Max Hourly Rate",
+      "mode": "Mode"
+    }
+  }
+}
