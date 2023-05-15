@@ -66,7 +66,6 @@ linux).
 
 * Clone this repository
 * `cd circuitbreaker/`
-* Build the frontend via docker: `./build_frontend.sh`
 * `go install`
 * Execute `circuitbreaker` with the correct command line flags to connect to
   `lnd`. See `circuitbreaker --help` for details.
@@ -116,6 +115,10 @@ For a quick try out or demo, it is possible to run circuitbreaker in stub mode.
 In this mode, fake traffic is generated and no lnd instance is required.
 
 `docker run -p 9235:9235 ghcr.io/lightningequipment/circuitbreaker:latest --httplisten 0.0.0.0:9235 --stub`
+
+## Development
+
+To build the frontend via docker: run `./build_frontend.sh`.
 
 ## Limitations
 * This software is alpha quality. Use at your own risk and be careful in particular on mainnet.
