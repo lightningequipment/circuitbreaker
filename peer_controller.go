@@ -208,7 +208,7 @@ func (p *peerController) syncPendingHtlcs(ctx context.Context) (bool, error) {
 
 		// Htlc is no longer pending on incoming side. Must have missed
 		// an htlc event. Clear it from our list.
-		delete(p.htlcs, key)
+		p.markHtlcComplete(key)
 
 		logger := p.keyLogger(key)
 		logger.Infow("Cleaning up dangling htlc")
@@ -358,7 +358,7 @@ func (p *peerController) run(ctx context.Context) error {
 				continue
 			}
 
-			delete(p.htlcs, key)
+			p.markHtlcComplete(key)
 
 			// Update rate counters.
 			if resolvedEvent.settled {
@@ -395,6 +395,10 @@ func (p *peerController) run(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
+}
+
+func (p *peerController) markHtlcComplete(key circuitKey) {
+	delete(p.htlcs, key)
 }
 
 func (p *peerController) incrCounter(event eventType) {
