@@ -308,7 +308,7 @@ func (l *lndclientGrpc) getNodeAlias(key route.Vertex) (string, error) {
 }
 
 func (l *lndclientGrpc) getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
-	map[route.Vertex]map[circuitKey]struct{}, error) {
+	map[route.Vertex]map[circuitKey]*inFlightHtlc, error) {
 
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
@@ -323,7 +323,7 @@ func (l *lndclientGrpc) getPendingIncomingHtlcs(ctx context.Context, peer *route
 		return nil, err
 	}
 
-	allHtlcs := make(map[route.Vertex]map[circuitKey]struct{})
+	allHtlcs := make(map[route.Vertex]map[circuitKey]*inFlightHtlc)
 	for _, channel := range resp.Channels {
 		peer, err := route.NewVertexFromStr(channel.RemotePubkey)
 		if err != nil {
@@ -332,7 +332,7 @@ func (l *lndclientGrpc) getPendingIncomingHtlcs(ctx context.Context, peer *route
 
 		htlcs, ok := allHtlcs[peer]
 		if !ok {
-			htlcs = make(map[circuitKey]struct{})
+			htlcs = make(map[circuitKey]*inFlightHtlc)
 			allHtlcs[peer] = htlcs
 		}
 
@@ -346,7 +346,10 @@ func (l *lndclientGrpc) getPendingIncomingHtlcs(ctx context.Context, peer *route
 				htlc:    htlc.HtlcIndex,
 			}
 
-			htlcs[key] = struct{}{}
+			// Note: we cannot easily recover added timestamp or incoming
+			// and outgoing amounts on resume, so we leave these values as
+			// zero to indicate that they are unknown due to restart.
+			htlcs[key] = &inFlightHtlc{}
 		}
 	}
 

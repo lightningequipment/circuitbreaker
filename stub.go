@@ -380,9 +380,9 @@ func (s *stubLndClient) htlcInterceptor(ctx context.Context) (htlcInterceptorCli
 }
 
 func (s *stubLndClient) getPendingIncomingHtlcs(ctx context.Context, targetPeer *route.Vertex) (
-	map[route.Vertex]map[circuitKey]struct{}, error) {
+	map[route.Vertex]map[circuitKey]*inFlightHtlc, error) {
 
-	allHtlcs := make(map[route.Vertex]map[circuitKey]struct{})
+	allHtlcs := make(map[route.Vertex]map[circuitKey]*inFlightHtlc)
 
 	s.pendingHtlcsLock.Lock()
 	for htlcKey, inFlight := range s.pendingHtlcs {
@@ -392,10 +392,10 @@ func (s *stubLndClient) getPendingIncomingHtlcs(ctx context.Context, targetPeer 
 
 		htlcs, ok := allHtlcs[inFlight.incomingPeer]
 		if !ok {
-			htlcs = make(map[circuitKey]struct{})
+			htlcs = make(map[circuitKey]*inFlightHtlc)
 		}
 
-		htlcs[htlcKey] = struct{}{}
+		htlcs[htlcKey] = &inFlightHtlc{}
 	}
 	s.pendingHtlcsLock.Unlock()
 

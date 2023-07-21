@@ -74,12 +74,12 @@ func (l *lndclientMock) getNodeAlias(key route.Vertex) (string, error) {
 }
 
 func (l *lndclientMock) getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
-	map[route.Vertex]map[circuitKey]struct{}, error) {
+	map[route.Vertex]map[circuitKey]*inFlightHtlc, error) {
 
-	htlcs := make(map[route.Vertex]map[circuitKey]struct{})
+	htlcs := make(map[route.Vertex]map[circuitKey]*inFlightHtlc)
 
 	for _, ch := range l.channels {
-		htlcs[ch.peer] = map[circuitKey]struct{}{}
+		htlcs[ch.peer] = make(map[circuitKey]*inFlightHtlc)
 	}
 
 	return htlcs, nil

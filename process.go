@@ -31,7 +31,7 @@ type lndclient interface {
 	htlcInterceptor(ctx context.Context) (htlcInterceptorClient, error)
 
 	getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
-		map[route.Vertex]map[circuitKey]struct{}, error)
+		map[route.Vertex]map[circuitKey]*inFlightHtlc, error)
 }
 
 type circuitKey struct {
@@ -227,13 +227,14 @@ func (p *process) getPeerController(ctx context.Context, peer route.Vertex,
 	}
 
 	// If the peer does not yet exist, initialize it with no pending htlcs.
-	htlcs := make(map[circuitKey]struct{})
+	htlcs := make(map[circuitKey]*inFlightHtlc)
 
 	return p.createPeerController(ctx, peer, startGo, htlcs)
 }
 
 func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
-	startGo func(func() error), htlcs map[circuitKey]struct{}) *peerController {
+	startGo func(func() error),
+	htlcs map[circuitKey]*inFlightHtlc) *peerController {
 
 	peerCfg, ok := p.limits.PerPeer[peer]
 	if !ok {

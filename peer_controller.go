@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/paulbellamy/ratecounter"
 	"go.uber.org/zap"
@@ -64,12 +65,18 @@ type peerController struct {
 
 	rateCounters []*eventCounter
 
-	htlcs map[circuitKey]struct{}
+	htlcs map[circuitKey]*inFlightHtlc
 
 	lastChannelSync time.Time
 	pubKey          route.Vertex
 	lnd             lndclient
 	now             func() time.Time
+}
+
+type inFlightHtlc struct {
+	addedTs      time.Time
+	incomingMsat lnwire.MilliSatoshi
+	outgoingMsat lnwire.MilliSatoshi
 }
 
 type peerInterceptEvent struct {
@@ -99,7 +106,7 @@ type peerControllerCfg struct {
 	logger    *zap.SugaredLogger
 	limit     Limit
 	burstSize int
-	htlcs     map[circuitKey]struct{}
+	htlcs     map[circuitKey]*inFlightHtlc
 	lnd       lndclient
 	pubKey    route.Vertex
 	now       func() time.Time
@@ -421,7 +428,11 @@ func getRate(maxHourlyRate int64) rate.Limit {
 }
 
 func (p *peerController) forward(event interceptEvent) error {
-	p.htlcs[event.circuitKey] = struct{}{}
+	p.htlcs[event.circuitKey] = &inFlightHtlc{
+		addedTs:      p.now(),
+		incomingMsat: event.incomingMsat,
+		outgoingMsat: event.outgoingMsat,
+	}
 
 	err := event.resume(true)
 	if err != nil {
