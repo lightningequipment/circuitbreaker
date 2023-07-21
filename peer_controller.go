@@ -345,7 +345,7 @@ func (p *peerController) run(ctx context.Context) error {
 		// An htlc has been resolved in lnd. Remove it from the pending htlcs
 		// map to free up the slot for another htlc.
 		case resolvedEvent := <-p.resolvedChan:
-			key := resolvedEvent.circuitKey
+			key := resolvedEvent.incomingCircuitKey
 
 			_, ok := p.htlcs[key]
 			if !ok {

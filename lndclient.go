@@ -68,7 +68,7 @@ func (h *lndHtlcEventsClient) recvInternal() (*resolvedEvent, error) {
 
 	return &resolvedEvent{
 		settled: settled,
-		circuitKey: circuitKey{
+		incomingCircuitKey: circuitKey{
 			channel: event.IncomingChannelId,
 			htlc:    event.IncomingHtlcId,
 		},

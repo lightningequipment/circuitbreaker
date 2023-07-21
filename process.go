@@ -44,8 +44,8 @@ type interceptEvent struct {
 }
 
 type resolvedEvent struct {
-	circuitKey
-	settled bool
+	incomingCircuitKey circuitKey
+	settled            bool
 }
 
 type rateCounters struct {
@@ -291,7 +291,9 @@ func (p *process) eventLoop(ctx context.Context) error {
 			}
 
 		case resolvedEvent := <-p.resolveChan:
-			chanInfo, err := p.getChanInfo(resolvedEvent.channel)
+			chanInfo, err := p.getChanInfo(
+				resolvedEvent.incomingCircuitKey.channel,
+			)
 			if err != nil {
 				return err
 			}

@@ -142,8 +142,8 @@ func (s *stubLndClient) run() {
 func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
 	if !resp.resume {
 		s.eventChan <- &resolvedEvent{
-			circuitKey: resp.key,
-			settled:    false,
+			incomingCircuitKey: resp.key,
+			settled:            false,
 		}
 
 		return
@@ -176,8 +176,8 @@ func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
 	settled := rand.Int31n(100) < settledPerc //nolint: gosec
 
 	s.eventChan <- &resolvedEvent{
-		circuitKey: resp.key,
-		settled:    settled,
+		incomingCircuitKey: resp.key,
+		settled:            settled,
 	}
 
 	s.pendingHtlcsLock.Lock()
