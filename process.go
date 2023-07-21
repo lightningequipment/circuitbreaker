@@ -244,6 +244,7 @@ func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 		htlcs:     htlcs,
 		lnd:       p.client,
 		pubKey:    peer,
+		now:       time.Now,
 	}
 	ctrl := newPeerController(cfg)
 

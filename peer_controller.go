@@ -69,6 +69,7 @@ type peerController struct {
 	lastChannelSync time.Time
 	pubKey          route.Vertex
 	lnd             lndclient
+	now             func() time.Time
 }
 
 type peerInterceptEvent struct {
@@ -96,6 +97,7 @@ type peerControllerCfg struct {
 	htlcs     map[circuitKey]struct{}
 	lnd       lndclient
 	pubKey    route.Vertex
+	now       func() time.Time
 }
 
 func newPeerController(cfg *peerControllerCfg) *peerController {
@@ -133,7 +135,8 @@ func newPeerController(cfg *peerControllerCfg) *peerController {
 		rateCounters:    rateCounters,
 		lnd:             cfg.lnd,
 		pubKey:          cfg.pubKey,
-		lastChannelSync: time.Now(),
+		lastChannelSync: cfg.now(),
+		now:             cfg.now,
 	}
 }
 
@@ -193,7 +196,7 @@ func (p *peerController) syncPendingHtlcs(ctx context.Context) (bool, error) {
 
 	htlcs := allHtlcs[p.pubKey]
 
-	p.lastChannelSync = time.Now()
+	p.lastChannelSync = p.now()
 
 	deletes := false
 	for key := range p.htlcs {
