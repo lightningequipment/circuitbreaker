@@ -45,7 +45,9 @@ type interceptEvent struct {
 
 type resolvedEvent struct {
 	incomingCircuitKey circuitKey
+	outgoingCircuitKey circuitKey
 	settled            bool
+	timestamp          time.Time
 }
 
 type rateCounters struct {

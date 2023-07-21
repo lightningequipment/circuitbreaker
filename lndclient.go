@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
@@ -72,6 +73,11 @@ func (h *lndHtlcEventsClient) recvInternal() (*resolvedEvent, error) {
 			channel: event.IncomingChannelId,
 			htlc:    event.IncomingHtlcId,
 		},
+		outgoingCircuitKey: circuitKey{
+			channel: event.OutgoingChannelId,
+			htlc:    event.OutgoingHtlcId,
+		},
+		timestamp: time.Unix(0, int64(event.TimestampNs)),
 	}, nil
 }
 

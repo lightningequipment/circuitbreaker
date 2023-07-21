@@ -144,6 +144,7 @@ func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
 		s.eventChan <- &resolvedEvent{
 			incomingCircuitKey: resp.key,
 			settled:            false,
+			timestamp:          time.Now(),
 		}
 
 		return
@@ -178,6 +179,7 @@ func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
 	s.eventChan <- &resolvedEvent{
 		incomingCircuitKey: resp.key,
 		settled:            settled,
+		timestamp:          time.Now(),
 	}
 
 	s.pendingHtlcsLock.Lock()
