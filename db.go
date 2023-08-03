@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 	migrate "github.com/rubenv/sql-migrate"
 	_ "modernc.org/sqlite"
@@ -182,4 +184,16 @@ func (d *Db) GetLimits(ctx context.Context) (*Limits, error) {
 	}
 
 	return &limits, nil
+}
+
+type HtlcInfo struct {
+	addTime         time.Time
+	resolveTime     time.Time
+	settled         bool
+	incomingMsat    lnwire.MilliSatoshi
+	outgoingMsat    lnwire.MilliSatoshi
+	incomingPeer    route.Vertex
+	outgoingPeer    route.Vertex
+	incomingCircuit circuitKey
+	outgoingCircuit circuitKey
 }

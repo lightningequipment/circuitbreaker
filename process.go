@@ -249,6 +249,9 @@ func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 		lnd:       p.client,
 		pubKey:    peer,
 		now:       time.Now,
+		htlcCompleted: func(_ context.Context, _ *HtlcInfo) error {
+			return nil
+		},
 	}
 	ctrl := newPeerController(cfg)
 
