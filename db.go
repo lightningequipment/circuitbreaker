@@ -77,13 +77,26 @@ var migrations = &migrate.MemoryMigrationSource{
 	},
 }
 
+const (
+	// defaultFwdHistoryLimit is the default limit we place on the forwarding_history table
+	// to prevent creation of an ever-growing table.
+	//
+	// Justification for value:
+	// * ~100 bytes per row in the table.
+	// * Help ourselves to 10MB of disk space
+	// -> 100_000 entries
+	defaultFwdHistoryLimit = 100_000
+)
+
 var defaultNodeKey = route.Vertex{}
 
 type Db struct {
 	db *sql.DB
+
+	fwdHistoryLimit int
 }
 
-func NewDb(dbPath string) (*Db, error) {
+func NewDb(dbPath string, opts ...func(*Db)) (*Db, error) {
 	const busyTimeoutMs = 5000
 
 	dsn := dbPath + fmt.Sprintf("?_pragma=busy_timeout=%d", busyTimeoutMs)
@@ -101,9 +114,15 @@ func NewDb(dbPath string) (*Db, error) {
 		log.Infow("Applied migrations", "count", n)
 	}
 
-	return &Db{
-		db: db,
-	}, nil
+	database := &Db{
+		db:              db,
+		fwdHistoryLimit: defaultFwdHistoryLimit,
+	}
+	for _, opt := range opts {
+		opt(database)
+	}
+
+	return database, nil
 }
 
 func (d *Db) Close() error {
@@ -220,7 +239,8 @@ type HtlcInfo struct {
 	outgoingCircuit circuitKey
 }
 
-// RecordHtlcResolution records a HTLC that has been resolved.
+// RecordHtlcResolution records a HTLC that has been resolved and deletes the oldest rows from
+// the forwarding history table if the total row count has exceeded the configured limit.
 func (d *Db) RecordHtlcResolution(ctx context.Context,
 	htlc *HtlcInfo) error {
 
@@ -228,7 +248,7 @@ func (d *Db) RecordHtlcResolution(ctx context.Context,
 		return err
 	}
 
-	return nil
+	return d.limitHTLCRecords(ctx)
 }
 
 func (d *Db) insertHtlcResolution(ctx context.Context, htlc *HtlcInfo) error {
@@ -260,6 +280,49 @@ func (d *Db) insertHtlcResolution(ctx context.Context, htlc *HtlcInfo) error {
 		htlc.outgoingCircuit.channel,
 		htlc.outgoingCircuit.htlc,
 	)
+
+	return err
+}
+
+// limitHTLCRecords counts the number of forwarding history records in the database and
+// preemptively deletes records to fall 10% below the forwarding history limit if it has
+// been reached.
+//
+// Note that the count and deletion of records is *not* atomic, so this function may
+// not delete precisely 10% of the limit if other operations take place between count
+// and deletion.
+func (d *Db) limitHTLCRecords(ctx context.Context) error {
+	query := `SELECT COUNT(add_time) from forwarding_history`
+
+	var rowCount int
+	err := d.db.QueryRow(query).Scan(&rowCount)
+	if err != nil {
+		return err
+	}
+
+	if rowCount < d.fwdHistoryLimit {
+		return nil
+	}
+
+	// If we've hit our row count, delete oldest entries over the row limit plus an
+	// extra 10% of the limit to free up space so that we don't need to constantly
+	// delete on each
+	// insert.
+	//
+	// Note: if fwdHistoryLimit < 10 the additional 10% will be zero, so we'll just
+	// clear the rows beyond our limit. For such a small limit, we're expecting to
+	// be deleting all the time anyway, so this isn't a big performance hit.
+	offset := d.fwdHistoryLimit - (d.fwdHistoryLimit / 10)
+
+	query = `DELETE FROM forwarding_history
+        WHERE add_time <= (
+                SELECT add_time
+                FROM forwarding_history
+                ORDER BY add_time DESC
+                LIMIT 1 OFFSET ?
+        );`
+
+	_, err = d.db.ExecContext(ctx, query, offset)
 
 	return err
 }
