@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 )
 
@@ -227,8 +228,18 @@ func (s *stubLndClient) generateHtlcs(key route.Vertex, peer *stubPeer) {
 		s.pendingHtlcs[key][circuitKey] = struct{}{}
 		s.pendingHtlcsLock.Unlock()
 
+		// Randomly pick a non-zero incoming amount, and an outgoing amount that
+		// is less than or equal to our incoming amount (but not zero).
+		incomingAmount := rand.Int63n(100_000_000) + 1 //nolint: gosec
+		outgoingAmount := incomingAmount / 2
+		if outgoingAmount == 0 {
+			outgoingAmount = incomingAmount
+		}
+
 		s.interceptRequestChan <- &interceptedEvent{
-			circuitKey: circuitKey,
+			circuitKey:   circuitKey,
+			incomingMsat: lnwire.MilliSatoshi(incomingAmount),
+			outgoingMsat: lnwire.MilliSatoshi(outgoingAmount),
 		}
 
 		htlcId++

@@ -9,6 +9,7 @@ import (
 
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/macaroons"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"go.uber.org/zap"
@@ -104,7 +105,9 @@ type lndHtlcInterceptorClient struct {
 }
 
 type interceptedEvent struct {
-	circuitKey circuitKey
+	circuitKey   circuitKey
+	incomingMsat lnwire.MilliSatoshi
+	outgoingMsat lnwire.MilliSatoshi
 }
 
 func (h *lndHtlcInterceptorClient) recv() (*interceptedEvent, error) {
@@ -118,6 +121,8 @@ func (h *lndHtlcInterceptorClient) recv() (*interceptedEvent, error) {
 			channel: event.IncomingCircuitKey.ChanId,
 			htlc:    event.IncomingCircuitKey.HtlcId,
 		},
+		incomingMsat: lnwire.MilliSatoshi(event.IncomingAmountMsat),
+		outgoingMsat: lnwire.MilliSatoshi(event.OutgoingAmountMsat),
 	}, nil
 }
 

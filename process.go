@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -40,7 +41,9 @@ type circuitKey struct {
 
 type interceptEvent struct {
 	circuitKey
-	resume func(bool) error
+	incomingMsat lnwire.MilliSatoshi
+	outgoingMsat lnwire.MilliSatoshi
+	resume       func(bool) error
 }
 
 type resolvedEvent struct {
@@ -445,8 +448,10 @@ func (p *process) processInterceptor(ctx context.Context,
 
 		select {
 		case p.interceptChan <- interceptEvent{
-			circuitKey: key,
-			resume:     resume,
+			circuitKey:   key,
+			incomingMsat: event.incomingMsat,
+			outgoingMsat: event.outgoingMsat,
+			resume:       resume,
 		}:
 
 		case <-ctx.Done():
