@@ -52,6 +52,28 @@ var migrations = &migrate.MemoryMigrationSource{
 				`,
 			},
 		},
+		{
+			Id: "3",
+			Up: []string{
+				`CREATE TABLE IF NOT EXISTS forwarding_history (
+                                        add_time TIMESTAMP NOT NULL,
+                                        resolved_time TIMESTAMP NOT NULL,
+                                        settled BOOLEAN NOT NULL,
+                                        incoming_amt_msat INTEGER NOT NULL CHECK (incoming_amt_msat > 0),
+                                        outgoing_amt_msat INTEGER NOT NULL CHECK (outgoing_amt_msat > 0),
+                                        incoming_peer TEXT NOT NULL,
+                                        incoming_channel INTEGER NOT NULL,
+                                        incoming_htlc_index INTEGER NOT NULL,
+                                        outgoing_peer TEXT NOT NULL,
+                                        outgoing_channel INTEGER NOT NULL,
+                                        outgoing_htlc_index INTEGER NOT NULL,
+                                        
+                                        CONSTRAINT unique_incoming_circuit UNIQUE (incoming_channel, incoming_htlc_index),
+                                        CONSTRAINT unique_outgoing_circuit UNIQUE (outgoing_channel, outgoing_htlc_index)
+                                );`,
+				`CREATE INDEX add_time_index ON forwarding_history (add_time);`,
+			},
+		},
 	},
 }
 
@@ -196,4 +218,48 @@ type HtlcInfo struct {
 	outgoingPeer    route.Vertex
 	incomingCircuit circuitKey
 	outgoingCircuit circuitKey
+}
+
+// RecordHtlcResolution records a HTLC that has been resolved.
+func (d *Db) RecordHtlcResolution(ctx context.Context,
+	htlc *HtlcInfo) error {
+
+	if err := d.insertHtlcResolution(ctx, htlc); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (d *Db) insertHtlcResolution(ctx context.Context, htlc *HtlcInfo) error {
+	insert := `INSERT INTO forwarding_history (
+                add_time,
+                resolved_time,
+                settled,
+                incoming_amt_msat,
+                outgoing_amt_msat,
+                incoming_peer,
+                incoming_channel,
+                incoming_htlc_index,
+                outgoing_peer,
+                outgoing_channel,
+                outgoing_htlc_index)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?);`
+
+	_, err := d.db.ExecContext(
+		ctx, insert,
+		htlc.addTime.UnixNano(),
+		htlc.resolveTime.UnixNano(),
+		htlc.settled,
+		uint64(htlc.incomingMsat),
+		uint64(htlc.outgoingMsat),
+		hex.EncodeToString(htlc.incomingPeer[:]),
+		htlc.incomingCircuit.channel,
+		htlc.incomingCircuit.htlc,
+		hex.EncodeToString(htlc.outgoingPeer[:]),
+		htlc.outgoingCircuit.channel,
+		htlc.outgoingCircuit.htlc,
+	)
+
+	return err
 }
