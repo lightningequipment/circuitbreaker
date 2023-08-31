@@ -9,17 +9,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDb(t *testing.T) {
+func setupTestDb(t *testing.T) (*Db, func()) {
 	file, err := os.CreateTemp("", "test_db_")
 	require.NoError(t, err)
 
-	defer os.Remove(file.Name())
-
-	//log := zaptest.NewLogger(t).Sugar()
 	db, err := NewDb(file.Name())
 	require.NoError(t, err)
 
+	return db, func() {
+		os.Remove(file.Name())
+	}
+}
+
+func TestDb(t *testing.T) {
 	ctx := context.Background()
+	db, cleanup := setupTestDb(t)
+	defer cleanup()
 
 	expectedDefaultLimit := Limit{
 		MaxPending:    5,

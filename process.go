@@ -62,6 +62,7 @@ type rateCountersRequest struct {
 }
 
 type process struct {
+	db     *Db
 	client lndclient
 	limits *Limits
 	log    *zap.SugaredLogger
@@ -85,8 +86,9 @@ type process struct {
 	resolvedCallback func()
 }
 
-func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits) *process {
+func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits, db *Db) *process {
 	return &process{
+		db:                      db,
 		log:                     log,
 		client:                  client,
 		interceptChan:           make(chan interceptEvent),
@@ -249,8 +251,22 @@ func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 		lnd:       p.client,
 		pubKey:    peer,
 		now:       time.Now,
-		htlcCompleted: func(_ context.Context, _ *HtlcInfo) error {
-			return nil
+		htlcCompleted: func(ctx context.Context, htlc *HtlcInfo) error {
+			// If the add time of a htlc is zero, it was resumed after a LND
+			// restart. We don't store these htlcs because they have
+			// incomplete information (missing add time and amounts).
+			if htlc.addTime.IsZero() {
+				log.Debug("Not storing incomplete htlc resumed after "+
+					"restart: %v (%v) -> %v (%v)",
+					htlc.incomingCircuit.channel,
+					htlc.incomingCircuit.htlc,
+					htlc.outgoingCircuit.channel,
+					htlc.outgoingCircuit.htlc)
+
+				return nil
+			}
+
+			return p.db.RecordHtlcResolution(ctx, htlc)
 		},
 	}
 	ctrl := newPeerController(cfg)
