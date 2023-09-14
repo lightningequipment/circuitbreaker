@@ -12,6 +12,14 @@ var mockIdentity = route.Vertex{1, 2, 3}
 var testChannels = map[uint64]*channel{
 	2: {peer: route.Vertex{2}},
 	3: {peer: route.Vertex{3}, initiator: true},
+	4: {peer: route.Vertex{4}},
+}
+
+// outgoingKey is an outgoing cirucit key for a channel that is contained in our set of open
+// test channels.
+var outgoingKey = circuitKey{
+	channel: 4,
+	htlc:    3,
 }
 
 type lndclientMock struct {

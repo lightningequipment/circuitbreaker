@@ -77,6 +77,7 @@ func testProcess(t *testing.T, event resolveEvent) {
 
 	htlcEvent := &resolvedEvent{
 		incomingCircuitKey: key,
+		outgoingCircuitKey: outgoingKey,
 	}
 
 	switch event {
@@ -179,6 +180,7 @@ func testRateLimit(t *testing.T, mode Mode) {
 
 		htlcEvent := &resolvedEvent{
 			incomingCircuitKey: key,
+			outgoingCircuitKey: outgoingKey,
 			settled:            false,
 		}
 
@@ -288,7 +290,7 @@ func TestNewPeer(t *testing.T) {
 
 	state, err := p.getRateCounters(ctx)
 	require.NoError(t, err)
-	require.Len(t, state, 2)
+	require.Len(t, state, 3)
 
 	// Add a new peer.
 	log.Infow("Add a new peer")
@@ -299,7 +301,7 @@ func TestNewPeer(t *testing.T) {
 		state, err := p.getRateCounters(ctx)
 		require.NoError(t, err)
 
-		return len(state) == 3
+		return len(state) == 4
 	}, time.Second, 100*time.Millisecond)
 
 	cancel()

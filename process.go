@@ -306,7 +306,19 @@ func (p *process) eventLoop(ctx context.Context) error {
 
 			ctrl := p.getPeerController(ctx, chanInfo.peer, group.Go)
 
-			if err := ctrl.resolved(ctx, resolvedEvent); err != nil {
+			// Lookup the outgoing peer to supplement the
+			// information on the resolved event.
+			chanInfo, err = p.getChanInfo(
+				resolvedEvent.outgoingCircuitKey.channel,
+			)
+			if err != nil {
+				return err
+			}
+
+			if err := ctrl.resolved(ctx, peerResolvedEvent{
+				resolvedEvent: resolvedEvent,
+				outgoingPeer:  chanInfo.peer,
+			}); err != nil {
 				return err
 			}
 

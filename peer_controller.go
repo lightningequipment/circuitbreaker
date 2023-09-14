@@ -58,7 +58,7 @@ type peerController struct {
 	limiter         *rate.Limiter
 	logger          *zap.SugaredLogger
 	interceptChan   chan peerInterceptEvent
-	resolvedChan    chan resolvedEvent
+	resolvedChan    chan peerResolvedEvent
 	updateLimitChan chan Limit
 	getStateChan    chan chan *peerState
 
@@ -76,6 +76,11 @@ type peerInterceptEvent struct {
 	interceptEvent
 
 	peerInitiated bool
+}
+
+type peerResolvedEvent struct {
+	resolvedEvent
+	outgoingPeer route.Vertex
 }
 
 type peerState struct {
@@ -128,7 +133,7 @@ func newPeerController(cfg *peerControllerCfg) *peerController {
 		limiter:         limiter,
 		logger:          logger,
 		interceptChan:   make(chan peerInterceptEvent),
-		resolvedChan:    make(chan resolvedEvent),
+		resolvedChan:    make(chan peerResolvedEvent),
 		updateLimitChan: make(chan Limit),
 		getStateChan:    make(chan chan *peerState),
 		htlcs:           cfg.htlcs,
@@ -442,7 +447,7 @@ func (p *peerController) process(ctx context.Context,
 }
 
 func (p *peerController) resolved(ctx context.Context,
-	key resolvedEvent) error {
+	key peerResolvedEvent) error {
 
 	select {
 	case p.resolvedChan <- key:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -168,11 +169,19 @@ func (s *stubLndClient) run() {
 }
 
 func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
+	s.pendingHtlcsLock.Lock()
+	inFlight, ok := s.pendingHtlcs[resp.key]
+	s.pendingHtlcsLock.Unlock()
+	if !ok {
+		panic(fmt.Sprintf("in flight HLTC :%v not found", resp.key))
+	}
+
 	if !resp.resume {
 		s.eventChan <- &resolvedEvent{
 			incomingCircuitKey: resp.key,
 			settled:            false,
 			timestamp:          time.Now(),
+			outgoingCircuitKey: inFlight.keyOut,
 		}
 
 		return
@@ -206,6 +215,7 @@ func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
 
 	s.eventChan <- &resolvedEvent{
 		incomingCircuitKey: resp.key,
+		outgoingCircuitKey: inFlight.keyOut,
 		settled:            settled,
 		timestamp:          time.Now(),
 	}
