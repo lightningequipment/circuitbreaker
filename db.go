@@ -326,3 +326,72 @@ func (d *Db) limitHTLCRecords(ctx context.Context) error {
 
 	return err
 }
+
+// ListForwardingHistory returns a list of htlcs that were resolved within the
+// time range provided (start time is inclusive, end time is exclusive)
+func (d *Db) ListForwardingHistory(ctx context.Context, start, end time.Time) (
+	[]*HtlcInfo, error) {
+
+	list := `SELECT 
+                add_time,
+                resolved_time,
+                settled,
+                incoming_amt_msat,
+                outgoing_amt_msat,
+                incoming_peer,
+                incoming_channel,
+                incoming_htlc_index,
+                outgoing_peer,
+                outgoing_channel,
+                outgoing_htlc_index
+                FROM forwarding_history
+                WHERE add_time >= ? AND add_time < ?;`
+
+	rows, err := d.db.QueryContext(ctx, list, start.UnixNano(), end.UnixNano())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var htlcs []*HtlcInfo
+	for rows.Next() {
+		var (
+			incomingPeer, outgoingPeer string
+			addTime, resolveTime       uint64
+			htlc                       HtlcInfo
+		)
+
+		err := rows.Scan(
+			&addTime,
+			&resolveTime,
+			&htlc.settled,
+			&htlc.incomingMsat,
+			&htlc.outgoingMsat,
+			&incomingPeer,
+			&htlc.incomingCircuit.channel,
+			&htlc.incomingCircuit.htlc,
+			&outgoingPeer,
+			&htlc.outgoingCircuit.channel,
+			&htlc.outgoingCircuit.htlc,
+		)
+		if err != nil {
+			return nil, err
+		}
+		htlc.addTime = time.Unix(0, int64(addTime))
+		htlc.resolveTime = time.Unix(0, int64(resolveTime))
+
+		htlc.incomingPeer, err = route.NewVertexFromStr(incomingPeer)
+		if err != nil {
+			return nil, err
+		}
+
+		htlc.outgoingPeer, err = route.NewVertexFromStr(outgoingPeer)
+		if err != nil {
+			return nil, err
+		}
+
+		htlcs = append(htlcs, &htlc)
+	}
+
+	return htlcs, nil
+}
