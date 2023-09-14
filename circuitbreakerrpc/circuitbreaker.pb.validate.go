@@ -1000,3 +1000,324 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = CounterValidationError{}
+
+// Validate checks the field values on ListForwardingHistoryRequest with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *ListForwardingHistoryRequest) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	// no validation rules for AddStartTimeNs
+
+	// no validation rules for AddEndTimeNs
+
+	return nil
+}
+
+// ListForwardingHistoryRequestValidationError is the validation error returned
+// by ListForwardingHistoryRequest.Validate if the designated constraints
+// aren't met.
+type ListForwardingHistoryRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e ListForwardingHistoryRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e ListForwardingHistoryRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e ListForwardingHistoryRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e ListForwardingHistoryRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e ListForwardingHistoryRequestValidationError) ErrorName() string {
+	return "ListForwardingHistoryRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e ListForwardingHistoryRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sListForwardingHistoryRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = ListForwardingHistoryRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = ListForwardingHistoryRequestValidationError{}
+
+// Validate checks the field values on ListForwardingHistoryResponse with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *ListForwardingHistoryResponse) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	for idx, item := range m.GetForwards() {
+		_, _ = idx, item
+
+		if v, ok := interface{}(item).(interface{ Validate() error }); ok {
+			if err := v.Validate(); err != nil {
+				return ListForwardingHistoryResponseValidationError{
+					field:  fmt.Sprintf("Forwards[%v]", idx),
+					reason: "embedded message failed validation",
+					cause:  err,
+				}
+			}
+		}
+
+	}
+
+	return nil
+}
+
+// ListForwardingHistoryResponseValidationError is the validation error
+// returned by ListForwardingHistoryResponse.Validate if the designated
+// constraints aren't met.
+type ListForwardingHistoryResponseValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e ListForwardingHistoryResponseValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e ListForwardingHistoryResponseValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e ListForwardingHistoryResponseValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e ListForwardingHistoryResponseValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e ListForwardingHistoryResponseValidationError) ErrorName() string {
+	return "ListForwardingHistoryResponseValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e ListForwardingHistoryResponseValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sListForwardingHistoryResponse.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = ListForwardingHistoryResponseValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = ListForwardingHistoryResponseValidationError{}
+
+// Validate checks the field values on CircuitKey with the rules defined in the
+// proto definition for this message. If any rules are violated, an error is returned.
+func (m *CircuitKey) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	// no validation rules for ShortChannelId
+
+	// no validation rules for HtlcIndex
+
+	return nil
+}
+
+// CircuitKeyValidationError is the validation error returned by
+// CircuitKey.Validate if the designated constraints aren't met.
+type CircuitKeyValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e CircuitKeyValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e CircuitKeyValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e CircuitKeyValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e CircuitKeyValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e CircuitKeyValidationError) ErrorName() string { return "CircuitKeyValidationError" }
+
+// Error satisfies the builtin error interface
+func (e CircuitKeyValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sCircuitKey.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = CircuitKeyValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = CircuitKeyValidationError{}
+
+// Validate checks the field values on Forward with the rules defined in the
+// proto definition for this message. If any rules are violated, an error is returned.
+func (m *Forward) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	// no validation rules for AddTimeNs
+
+	// no validation rules for ResolveTimeNs
+
+	// no validation rules for Settled
+
+	// no validation rules for IncomingAmount
+
+	// no validation rules for OutgoingAmount
+
+	// no validation rules for IncomingPeer
+
+	if v, ok := interface{}(m.GetIncomingCircuit()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return ForwardValidationError{
+				field:  "IncomingCircuit",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	// no validation rules for OutgoingPeer
+
+	if v, ok := interface{}(m.GetOutgoingCircuit()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return ForwardValidationError{
+				field:  "OutgoingCircuit",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	return nil
+}
+
+// ForwardValidationError is the validation error returned by Forward.Validate
+// if the designated constraints aren't met.
+type ForwardValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e ForwardValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e ForwardValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e ForwardValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e ForwardValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e ForwardValidationError) ErrorName() string { return "ForwardValidationError" }
+
+// Error satisfies the builtin error interface
+func (e ForwardValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sForward.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = ForwardValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = ForwardValidationError{}

@@ -40,6 +40,12 @@ service Service {
             get:"/limits"
         };        
     }
+
+    rpc ListForwardingHistory (ListForwardingHistoryRequest) returns (ListForwardingHistoryResponse) {
+        option (google.api.http) = {
+            get:"/forwarding_history"
+        };
+    }
 }
 
 message GetInfoRequest {}
@@ -108,4 +114,38 @@ message Counter {
     int64 fail = 1;
     int64 success = 2;
     int64 reject = 3;
+}
+
+message ListForwardingHistoryRequest {
+    // The inclusive start time for the query, used to filter HTLCs by the time they were added 
+    // to local incoming channel. If this value is zero, it will be treated as the unix epoch.
+    int64 add_start_time_ns = 1;
+
+    // The exclusive end time for the query, used to filter HTLCs by the time they were added to 
+    // the local incoming channel. If this value is zero, it will be assumed to be the current time.
+    int64 add_end_time_ns = 2; 
+}
+
+message ListForwardingHistoryResponse {
+    repeated Forward forwards = 1; 
+}
+
+message CircuitKey {
+    uint64 short_channel_id = 1;
+    uint32 htlc_index = 2;
+}
+
+message Forward {
+    // The time that the htlc was added to the incoming channel. Note that this value 
+    // may be zero if circuitbreaker restarted while the htlc was in flight - this 
+    // indicates that the value is unknown.
+    uint64 add_time_ns = 1;
+    uint64 resolve_time_ns = 2;
+    bool settled = 3;
+    uint64 incoming_amount = 4;
+    uint64 outgoing_amount = 5;
+    string incoming_peer = 6;
+    CircuitKey incoming_circuit = 7;
+    string outgoing_peer = 8;
+    CircuitKey outgoing_circuit = 9;
 }

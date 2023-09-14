@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/lightningequipment/circuitbreaker/circuitbreakerrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
@@ -310,4 +311,65 @@ func (s *server) ListLimits(ctx context.Context,
 		DefaultLimit: defaultLimit,
 		Limits:       rpcLimits,
 	}, nil
+}
+
+func (s *server) ListForwardingHistory(ctx context.Context,
+	req *circuitbreakerrpc.ListForwardingHistoryRequest) (
+	*circuitbreakerrpc.ListForwardingHistoryResponse, error) {
+
+	var (
+		// By default query from the epoch until now.
+		startTime = time.Time{}
+		endTime   = time.Now()
+	)
+
+	if req.AddStartTimeNs != 0 {
+		startTime = time.Unix(0, req.AddStartTimeNs)
+	}
+
+	if req.AddEndTimeNs != 0 {
+		endTime = time.Unix(0, req.AddEndTimeNs)
+	}
+
+	if startTime.After(endTime) {
+		return nil, fmt.Errorf("start time: %v after end time: %v", startTime,
+			endTime)
+	}
+
+	htlcs, err := s.db.ListForwardingHistory(ctx, startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+
+	return &circuitbreakerrpc.ListForwardingHistoryResponse{
+		Forwards: s.marshalFwdHistory(htlcs),
+	}, nil
+}
+
+func (s *server) marshalFwdHistory(htlcs []*HtlcInfo) []*circuitbreakerrpc.Forward {
+	rpcHtlcs := make([]*circuitbreakerrpc.Forward, len(htlcs))
+
+	for i, htlc := range htlcs {
+		forward := &circuitbreakerrpc.Forward{
+			AddTimeNs:      uint64(htlc.addTime.UnixNano()),
+			ResolveTimeNs:  uint64(htlc.resolveTime.UnixNano()),
+			Settled:        htlc.settled,
+			IncomingAmount: uint64(htlc.incomingMsat),
+			OutgoingAmount: uint64(htlc.outgoingMsat),
+			IncomingPeer:   htlc.incomingPeer.String(),
+			IncomingCircuit: &circuitbreakerrpc.CircuitKey{
+				ShortChannelId: htlc.incomingCircuit.channel,
+				HtlcIndex:      uint32(htlc.incomingCircuit.htlc),
+			},
+			OutgoingPeer: htlc.outgoingPeer.String(),
+			OutgoingCircuit: &circuitbreakerrpc.CircuitKey{
+				ShortChannelId: htlc.outgoingCircuit.channel,
+				HtlcIndex:      uint32(htlc.outgoingCircuit.htlc),
+			},
+		}
+
+		rpcHtlcs[i] = forward
+	}
+
+	return rpcHtlcs
 }
