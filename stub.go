@@ -81,7 +81,7 @@ type stubPeer struct {
 	alias    string
 }
 
-func newStubClient() *stubLndClient {
+func newStubClient(ctx context.Context) *stubLndClient {
 	peers := make(map[route.Vertex]*stubPeer)
 	chanMap := make(map[uint64]route.Vertex)
 	pendingHtlcs := make(map[circuitKey]*stubInFlight)
@@ -154,21 +154,21 @@ func newStubClient() *stubLndClient {
 			channels = append(channels, channel)
 		}
 
-		go client.generateHtlcs(key, peer, channels)
+		go client.generateHtlcs(ctx, key, peer, channels)
 	}
 
-	go client.run()
+	go client.run(ctx)
 
 	return client
 }
 
-func (s *stubLndClient) run() {
+func (s *stubLndClient) run(ctx context.Context) {
 	for resp := range s.interceptResponseChan {
-		go s.resolveHtlc(resp)
+		go s.resolveHtlc(ctx, resp)
 	}
 }
 
-func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
+func (s *stubLndClient) resolveHtlc(ctx context.Context, resp *interceptResponse) {
 	s.pendingHtlcsLock.Lock()
 	inFlight, ok := s.pendingHtlcs[resp.key]
 	s.pendingHtlcsLock.Unlock()
@@ -177,11 +177,15 @@ func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
 	}
 
 	if !resp.resume {
-		s.eventChan <- &resolvedEvent{
+		select {
+		case s.eventChan <- &resolvedEvent{
 			incomingCircuitKey: resp.key,
 			settled:            false,
 			timestamp:          time.Now(),
 			outgoingCircuitKey: inFlight.keyOut,
+		}:
+		case <-ctx.Done():
+			return
 		}
 
 		return
@@ -213,11 +217,15 @@ func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
 
 	settled := rand.Int31n(100) < settledPerc //nolint: gosec
 
-	s.eventChan <- &resolvedEvent{
+	select {
+	case s.eventChan <- &resolvedEvent{
 		incomingCircuitKey: resp.key,
 		outgoingCircuitKey: inFlight.keyOut,
 		settled:            settled,
 		timestamp:          time.Now(),
+	}:
+	case <-ctx.Done():
+		return
 	}
 
 	s.pendingHtlcsLock.Lock()
@@ -242,7 +250,7 @@ func randomDelay(profile int) time.Duration {
 		time.Millisecond
 }
 
-func (s *stubLndClient) generateHtlcs(key route.Vertex, peer *stubPeer,
+func (s *stubLndClient) generateHtlcs(ctx context.Context, key route.Vertex, peer *stubPeer,
 	outgoingChannels []uint64) {
 
 	log.Infow("Starting stub", "peer", peer.alias)
@@ -284,15 +292,24 @@ func (s *stubLndClient) generateHtlcs(key route.Vertex, peer *stubPeer,
 			outgoingAmount = incomingAmount
 		}
 
-		s.interceptRequestChan <- &interceptedEvent{
+		select {
+		case s.interceptRequestChan <- &interceptedEvent{
 			circuitKey:   circuitKeyIn,
 			incomingMsat: lnwire.MilliSatoshi(incomingAmount),
 			outgoingMsat: lnwire.MilliSatoshi(outgoingAmount),
+		}:
+		case <-ctx.Done():
+			return
 		}
 
 		htlcId++
 
-		time.Sleep(randomDelay(delayProfile))
+		select {
+		case <-time.After(randomDelay(delayProfile)):
+
+		case <-ctx.Done():
+			break
+		}
 	}
 }
 

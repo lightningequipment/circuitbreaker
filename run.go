@@ -54,10 +54,12 @@ func run(c *cli.Context) error {
 		}
 	}()
 
+	group, ctx := errgroup.WithContext(ctx)
+
 	stub := c.Bool(stubFlag.Name)
 	var client lndclient
 	if stub {
-		stubClient := newStubClient()
+		stubClient := newStubClient(ctx)
 
 		client = stubClient
 	} else {
@@ -144,8 +146,6 @@ func run(c *cli.Context) error {
 		Handler:           mux,
 		ReadHeaderTimeout: time.Second * 10,
 	}
-
-	group, ctx := errgroup.WithContext(ctx)
 
 	// Run circuitbreaker core.
 	group.Go(func() error {
