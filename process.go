@@ -526,6 +526,23 @@ func (p *process) getChanInfo(channel uint64) (*channel, error) {
 		return ch, nil
 	}
 
+	// If the channel is not open, fall back to checking our closed
+	// channels.
+	closedChannels, err := p.client.listClosedChannels()
+	if err != nil {
+		return nil, err
+	}
+
+	// Add to cache and try again.
+	for chanId, ch := range closedChannels {
+		p.chanMap[chanId] = ch
+	}
+
+	ch, ok = p.chanMap[channel]
+	if ok {
+		return ch, nil
+	}
+
 	// Channel not found.
 	return nil, fmt.Errorf("%w: %v", errChannelNotFound, channel)
 }
