@@ -37,7 +37,7 @@ func testProcess(t *testing.T, event resolveEvent) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	log := zaptest.NewLogger(t).Sugar()
@@ -114,7 +114,7 @@ func TestLimits(t *testing.T) {
 func testRateLimit(t *testing.T, mode Mode) {
 	defer Timeout()()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	cfg := &Limits{
@@ -204,7 +204,7 @@ func testRateLimit(t *testing.T, mode Mode) {
 func testMaxPending(t *testing.T, mode Mode) {
 	defer Timeout()()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	cfg := &Limits{
@@ -283,7 +283,7 @@ func TestNewPeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	log := zaptest.NewLogger(t).Sugar()
@@ -323,7 +323,7 @@ func TestNewPeer(t *testing.T) {
 func TestBlocked(t *testing.T) {
 	defer Timeout()()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	cfg := &Limits{
@@ -375,7 +375,7 @@ func TestChannelNotFound(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	log := zaptest.NewLogger(t).Sugar()

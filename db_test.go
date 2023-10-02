@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDb(t *testing.T, dbOpts ...func(*Db)) (*Db, func()) {
+func setupTestDb(t *testing.T, fwdingHistoryLimit int) (*Db, func()) {
 	file, err := os.CreateTemp("", "test_db_")
 	require.NoError(t, err)
 
-	db, err := NewDb(file.Name(), dbOpts...)
+	db, err := NewDb(file.Name(), fwdingHistoryLimit)
 	require.NoError(t, err)
 
 	return db, func() {
@@ -24,7 +24,7 @@ func setupTestDb(t *testing.T, dbOpts ...func(*Db)) (*Db, func()) {
 
 func TestDb(t *testing.T) {
 	ctx := context.Background()
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	expectedDefaultLimit := Limit{
@@ -68,18 +68,12 @@ func TestDb(t *testing.T) {
 	defer db.Close()
 }
 
-func dbWithCustomForwardingHistoryLimit(limit int) func(d *Db) {
-	return func(d *Db) {
-		d.fwdHistoryLimit = limit
-	}
-}
-
 func TestDbForwardingHistory(t *testing.T) {
 	limit := 20
 
 	// Create a test DB that will limit to 10 forwarding history records.
 	ctx := context.Background()
-	db, cleanup := setupTestDb(t, dbWithCustomForwardingHistoryLimit(limit))
+	db, cleanup := setupTestDb(t, limit)
 	defer cleanup()
 
 	// Insert HTLCs just up until our limit.
@@ -121,4 +115,17 @@ func testHtlc(i uint64) *HtlcInfo {
 			htlc:    i,
 		},
 	}
+}
+
+func TestDbNoForwardingHistory(t *testing.T) {
+	ctx := context.Background()
+	db, cleanup := setupTestDb(t, 0)
+	defer cleanup()
+
+	htlc := testHtlc(1)
+	require.NoError(t, db.RecordHtlcResolution(ctx, htlc))
+
+	fwds, err := db.ListForwardingHistory(ctx, time.Time{}, time.Unix(1000000, 0))
+	require.NoError(t, err)
+	require.Len(t, fwds, 0)
 }

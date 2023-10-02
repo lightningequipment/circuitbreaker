@@ -96,7 +96,7 @@ type Db struct {
 	fwdHistoryLimit int
 }
 
-func NewDb(dbPath string, opts ...func(*Db)) (*Db, error) {
+func NewDb(dbPath string, fwdHistoryLimit int) (*Db, error) {
 	const busyTimeoutMs = 5000
 
 	dsn := dbPath + fmt.Sprintf("?_pragma=busy_timeout=%d", busyTimeoutMs)
@@ -116,10 +116,7 @@ func NewDb(dbPath string, opts ...func(*Db)) (*Db, error) {
 
 	database := &Db{
 		db:              db,
-		fwdHistoryLimit: defaultFwdHistoryLimit,
-	}
-	for _, opt := range opts {
-		opt(database)
+		fwdHistoryLimit: fwdHistoryLimit,
 	}
 
 	return database, nil
@@ -243,6 +240,12 @@ type HtlcInfo struct {
 // the forwarding history table if the total row count has exceeded the configured limit.
 func (d *Db) RecordHtlcResolution(ctx context.Context,
 	htlc *HtlcInfo) error {
+
+	// If the database is configured to not store any records, save the hassle of
+	// writing and deleting a record by returning early.
+	if d.fwdHistoryLimit == 0 {
+		return nil
+	}
 
 	if err := d.insertHtlcResolution(ctx, htlc); err != nil {
 		return err

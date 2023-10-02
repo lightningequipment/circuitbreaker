@@ -129,6 +129,11 @@ func main() {
 			Value: "127.0.0.1:9234",
 			Usage: "grpc server listen address",
 		},
+		cli.Uint64Flag{
+			Name:  "fwdhistorylimit",
+			Usage: "limit the number of htlc forwards that are persisted",
+			Value: defaultFwdHistoryLimit,
+		},
 		httpListenFlag,
 		stubFlag,
 	}
