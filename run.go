@@ -88,7 +88,7 @@ func run(c *cli.Context) error {
 		return err
 	}
 
-	p := NewProcess(client, log, limits)
+	p := NewProcess(client, log, limits, db)
 
 	grpcServer := grpc.NewServer(
 		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer()),

@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
 
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 )
 
@@ -43,16 +45,35 @@ type stubChannel struct {
 	initiator bool
 }
 
+type stubInFlight struct {
+	incomingPeer route.Vertex
+	keyOut       circuitKey
+}
+
 type stubLndClient struct {
 	peers   map[route.Vertex]*stubPeer
 	chanMap map[uint64]route.Vertex
 
-	pendingHtlcs     map[route.Vertex]map[circuitKey]struct{}
+	// Provides a globally unique htlc id for outgoing htlcs to prevent
+	// duplicates when two sending channels pick the same outgoing channel.
+	outgoingHtlcIndex     uint64
+	outgoingHtlcIndexLock sync.Mutex
+
+	pendingHtlcs     map[circuitKey]*stubInFlight
 	pendingHtlcsLock sync.Mutex
 
 	eventChan             chan *resolvedEvent
 	interceptRequestChan  chan *interceptedEvent
 	interceptResponseChan chan *interceptResponse
+}
+
+func (s *stubLndClient) nextOutgoingHtlcIndex() uint64 {
+	s.outgoingHtlcIndexLock.Lock()
+	defer s.outgoingHtlcIndexLock.Unlock()
+
+	s.outgoingHtlcIndex++
+
+	return s.outgoingHtlcIndex
 }
 
 type stubPeer struct {
@@ -63,7 +84,7 @@ type stubPeer struct {
 func newStubClient() *stubLndClient {
 	peers := make(map[route.Vertex]*stubPeer)
 	chanMap := make(map[uint64]route.Vertex)
-	pendingHtlcs := make(map[route.Vertex]map[circuitKey]struct{})
+	pendingHtlcs := make(map[circuitKey]*stubInFlight)
 
 	var chanId uint64 = 1
 	for i, alias := range stubNodes {
@@ -98,8 +119,6 @@ func newStubClient() *stubLndClient {
 			channels: channels,
 		}
 
-		pendingHtlcs[key] = make(map[circuitKey]struct{})
-
 		log.Infow("populated", "peer", alias, "key", key[:])
 	}
 
@@ -125,7 +144,17 @@ func newStubClient() *stubLndClient {
 
 		key, peer := key, peer
 
-		go client.generateHtlcs(key, peer)
+		// Include all channels except the incoming peer's as possible outgoing
+		// channels.
+		var channels []uint64
+		for channel, channelPeer := range chanMap {
+			if channelPeer == key {
+				continue
+			}
+			channels = append(channels, channel)
+		}
+
+		go client.generateHtlcs(key, peer, channels)
 	}
 
 	go client.run()
@@ -140,10 +169,19 @@ func (s *stubLndClient) run() {
 }
 
 func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
+	s.pendingHtlcsLock.Lock()
+	inFlight, ok := s.pendingHtlcs[resp.key]
+	s.pendingHtlcsLock.Unlock()
+	if !ok {
+		panic(fmt.Sprintf("in flight HLTC :%v not found", resp.key))
+	}
+
 	if !resp.resume {
 		s.eventChan <- &resolvedEvent{
-			circuitKey: resp.key,
-			settled:    false,
+			incomingCircuitKey: resp.key,
+			settled:            false,
+			timestamp:          time.Now(),
+			outgoingCircuitKey: inFlight.keyOut,
 		}
 
 		return
@@ -176,12 +214,14 @@ func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
 	settled := rand.Int31n(100) < settledPerc //nolint: gosec
 
 	s.eventChan <- &resolvedEvent{
-		circuitKey: resp.key,
-		settled:    settled,
+		incomingCircuitKey: resp.key,
+		outgoingCircuitKey: inFlight.keyOut,
+		settled:            settled,
+		timestamp:          time.Now(),
 	}
 
 	s.pendingHtlcsLock.Lock()
-	delete(s.pendingHtlcs[key], resp.key)
+	delete(s.pendingHtlcs, resp.key)
 	s.pendingHtlcsLock.Unlock()
 }
 
@@ -202,8 +242,11 @@ func randomDelay(profile int) time.Duration {
 		time.Millisecond
 }
 
-func (s *stubLndClient) generateHtlcs(key route.Vertex, peer *stubPeer) {
+func (s *stubLndClient) generateHtlcs(key route.Vertex, peer *stubPeer,
+	outgoingChannels []uint64) {
+
 	log.Infow("Starting stub", "peer", peer.alias)
+	outgoingChanCount := int32(len(outgoingChannels))
 	chanCount := len(peer.channels)
 	chanIds := make([]uint64, 0)
 	for chanId := range peer.channels {
@@ -214,19 +257,37 @@ func (s *stubLndClient) generateHtlcs(key route.Vertex, peer *stubPeer) {
 
 	var htlcId uint64
 	for {
-		chanId := chanIds[rand.Int31n(int32(chanCount))] //nolint: gosec
+		chanInId := chanIds[rand.Int31n(int32(chanCount))] //nolint: gosec
 
-		circuitKey := circuitKey{
-			channel: chanId,
+		circuitKeyIn := circuitKey{
+			channel: chanInId,
 			htlc:    htlcId,
 		}
 
+		circuitKeyOut := circuitKey{
+			channel: outgoingChannels[rand.Int31n(outgoingChanCount)], //nolint: gosec
+			htlc:    s.nextOutgoingHtlcIndex(),
+		}
+
 		s.pendingHtlcsLock.Lock()
-		s.pendingHtlcs[key][circuitKey] = struct{}{}
+		s.pendingHtlcs[circuitKeyIn] = &stubInFlight{
+			incomingPeer: key,
+			keyOut:       circuitKeyOut,
+		}
 		s.pendingHtlcsLock.Unlock()
 
+		// Randomly pick a non-zero incoming amount, and an outgoing amount that
+		// is less than or equal to our incoming amount (but not zero).
+		incomingAmount := rand.Int63n(100_000_000) + 1 //nolint: gosec
+		outgoingAmount := incomingAmount / 2
+		if outgoingAmount == 0 {
+			outgoingAmount = incomingAmount
+		}
+
 		s.interceptRequestChan <- &interceptedEvent{
-			circuitKey: circuitKey,
+			circuitKey:   circuitKeyIn,
+			incomingMsat: lnwire.MilliSatoshi(incomingAmount),
+			outgoingMsat: lnwire.MilliSatoshi(outgoingAmount),
 		}
 
 		htlcId++
@@ -318,23 +379,23 @@ func (s *stubLndClient) htlcInterceptor(ctx context.Context) (htlcInterceptorCli
 	return newStubHtlcInterceptorClient(s), nil
 }
 
-func (s *stubLndClient) getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
-	map[route.Vertex]map[circuitKey]struct{}, error) {
+func (s *stubLndClient) getPendingIncomingHtlcs(ctx context.Context, targetPeer *route.Vertex) (
+	map[route.Vertex]map[circuitKey]*inFlightHtlc, error) {
 
-	allHtlcs := make(map[route.Vertex]map[circuitKey]struct{})
+	allHtlcs := make(map[route.Vertex]map[circuitKey]*inFlightHtlc)
 
 	s.pendingHtlcsLock.Lock()
-	for peerKey, peerHtlcs := range s.pendingHtlcs {
-		if peer != nil && peerKey != *peer {
+	for htlcKey, inFlight := range s.pendingHtlcs {
+		if targetPeer != nil && inFlight.incomingPeer != *targetPeer {
 			continue
 		}
 
-		htlcs := make(map[circuitKey]struct{})
-		for htlc := range peerHtlcs {
-			htlcs[htlc] = struct{}{}
+		htlcs, ok := allHtlcs[inFlight.incomingPeer]
+		if !ok {
+			htlcs = make(map[circuitKey]*inFlightHtlc)
 		}
 
-		allHtlcs[peerKey] = htlcs
+		htlcs[htlcKey] = &inFlightHtlc{}
 	}
 	s.pendingHtlcsLock.Unlock()
 

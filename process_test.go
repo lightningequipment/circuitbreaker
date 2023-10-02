@@ -37,6 +37,9 @@ func testProcess(t *testing.T, event resolveEvent) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	db, cleanup := setupTestDb(t)
+	defer cleanup()
+
 	log := zaptest.NewLogger(t).Sugar()
 
 	cfg := &Limits{
@@ -52,7 +55,7 @@ func testProcess(t *testing.T, event resolveEvent) {
 		},
 	}
 
-	p := NewProcess(client, log, cfg)
+	p := NewProcess(client, log, cfg, db)
 
 	resolved := make(chan struct{})
 	p.resolvedCallback = func() {
@@ -76,7 +79,8 @@ func testProcess(t *testing.T, event resolveEvent) {
 	require.True(t, resp.resume)
 
 	htlcEvent := &resolvedEvent{
-		circuitKey: key,
+		incomingCircuitKey: key,
+		outgoingCircuitKey: outgoingKey,
 	}
 
 	switch event {
@@ -110,6 +114,9 @@ func TestLimits(t *testing.T) {
 func testRateLimit(t *testing.T, mode Mode) {
 	defer Timeout()()
 
+	db, cleanup := setupTestDb(t)
+	defer cleanup()
+
 	cfg := &Limits{
 		PerPeer: map[route.Vertex]Limit{
 			{2}: {
@@ -129,7 +136,7 @@ func testRateLimit(t *testing.T, mode Mode) {
 
 	log := zaptest.NewLogger(t).Sugar()
 
-	p := NewProcess(client, log, cfg)
+	p := NewProcess(client, log, cfg, db)
 	p.burstSize = 2
 
 	exit := make(chan error)
@@ -178,8 +185,9 @@ func testRateLimit(t *testing.T, mode Mode) {
 		require.False(t, resp.resume)
 
 		htlcEvent := &resolvedEvent{
-			circuitKey: key,
-			settled:    false,
+			incomingCircuitKey: key,
+			outgoingCircuitKey: outgoingKey,
+			settled:            false,
 		}
 
 		client.htlcEvents <- htlcEvent
@@ -195,6 +203,9 @@ func testRateLimit(t *testing.T, mode Mode) {
 
 func testMaxPending(t *testing.T, mode Mode) {
 	defer Timeout()()
+
+	db, cleanup := setupTestDb(t)
+	defer cleanup()
 
 	cfg := &Limits{
 		PerPeer: map[route.Vertex]Limit{
@@ -217,7 +228,7 @@ func testMaxPending(t *testing.T, mode Mode) {
 
 	log := zaptest.NewLogger(t).Sugar()
 
-	p := NewProcess(client, log, cfg)
+	p := NewProcess(client, log, cfg, db)
 	p.burstSize = 2
 
 	exit := make(chan error)
@@ -272,11 +283,14 @@ func TestNewPeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	db, cleanup := setupTestDb(t)
+	defer cleanup()
+
 	log := zaptest.NewLogger(t).Sugar()
 
 	cfg := &Limits{}
 
-	p := NewProcess(client, log, cfg)
+	p := NewProcess(client, log, cfg, db)
 
 	// Setup quick peer refresh.
 	p.peerRefreshInterval = 100 * time.Millisecond
@@ -288,7 +302,7 @@ func TestNewPeer(t *testing.T) {
 
 	state, err := p.getRateCounters(ctx)
 	require.NoError(t, err)
-	require.Len(t, state, 2)
+	require.Len(t, state, 3)
 
 	// Add a new peer.
 	log.Infow("Add a new peer")
@@ -299,7 +313,7 @@ func TestNewPeer(t *testing.T) {
 		state, err := p.getRateCounters(ctx)
 		require.NoError(t, err)
 
-		return len(state) == 3
+		return len(state) == 4
 	}, time.Second, 100*time.Millisecond)
 
 	cancel()
@@ -308,6 +322,9 @@ func TestNewPeer(t *testing.T) {
 
 func TestBlocked(t *testing.T) {
 	defer Timeout()()
+
+	db, cleanup := setupTestDb(t)
+	defer cleanup()
 
 	cfg := &Limits{
 		PerPeer: map[route.Vertex]Limit{
@@ -324,7 +341,7 @@ func TestBlocked(t *testing.T) {
 
 	log := zaptest.NewLogger(t).Sugar()
 
-	p := NewProcess(client, log, cfg)
+	p := NewProcess(client, log, cfg, db)
 
 	exit := make(chan error)
 	go func() {

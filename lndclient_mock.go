@@ -12,6 +12,14 @@ var mockIdentity = route.Vertex{1, 2, 3}
 var testChannels = map[uint64]*channel{
 	2: {peer: route.Vertex{2}},
 	3: {peer: route.Vertex{3}, initiator: true},
+	4: {peer: route.Vertex{4}},
+}
+
+// outgoingKey is an outgoing cirucit key for a channel that is contained in our set of open
+// test channels.
+var outgoingKey = circuitKey{
+	channel: 4,
+	htlc:    3,
 }
 
 type lndclientMock struct {
@@ -66,12 +74,12 @@ func (l *lndclientMock) getNodeAlias(key route.Vertex) (string, error) {
 }
 
 func (l *lndclientMock) getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
-	map[route.Vertex]map[circuitKey]struct{}, error) {
+	map[route.Vertex]map[circuitKey]*inFlightHtlc, error) {
 
-	htlcs := make(map[route.Vertex]map[circuitKey]struct{})
+	htlcs := make(map[route.Vertex]map[circuitKey]*inFlightHtlc)
 
 	for _, ch := range l.channels {
-		htlcs[ch.peer] = map[circuitKey]struct{}{}
+		htlcs[ch.peer] = make(map[circuitKey]*inFlightHtlc)
 	}
 
 	return htlcs, nil

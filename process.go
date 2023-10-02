@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -30,7 +31,7 @@ type lndclient interface {
 	htlcInterceptor(ctx context.Context) (htlcInterceptorClient, error)
 
 	getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
-		map[route.Vertex]map[circuitKey]struct{}, error)
+		map[route.Vertex]map[circuitKey]*inFlightHtlc, error)
 }
 
 type circuitKey struct {
@@ -40,12 +41,16 @@ type circuitKey struct {
 
 type interceptEvent struct {
 	circuitKey
-	resume func(bool) error
+	incomingMsat lnwire.MilliSatoshi
+	outgoingMsat lnwire.MilliSatoshi
+	resume       func(bool) error
 }
 
 type resolvedEvent struct {
-	circuitKey
-	settled bool
+	incomingCircuitKey circuitKey
+	outgoingCircuitKey circuitKey
+	settled            bool
+	timestamp          time.Time
 }
 
 type rateCounters struct {
@@ -57,6 +62,7 @@ type rateCountersRequest struct {
 }
 
 type process struct {
+	db     *Db
 	client lndclient
 	limits *Limits
 	log    *zap.SugaredLogger
@@ -80,8 +86,9 @@ type process struct {
 	resolvedCallback func()
 }
 
-func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits) *process {
+func NewProcess(client lndclient, log *zap.SugaredLogger, limits *Limits, db *Db) *process {
 	return &process{
+		db:                      db,
 		log:                     log,
 		client:                  client,
 		interceptChan:           make(chan interceptEvent),
@@ -222,13 +229,14 @@ func (p *process) getPeerController(ctx context.Context, peer route.Vertex,
 	}
 
 	// If the peer does not yet exist, initialize it with no pending htlcs.
-	htlcs := make(map[circuitKey]struct{})
+	htlcs := make(map[circuitKey]*inFlightHtlc)
 
 	return p.createPeerController(ctx, peer, startGo, htlcs)
 }
 
 func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
-	startGo func(func() error), htlcs map[circuitKey]struct{}) *peerController {
+	startGo func(func() error),
+	htlcs map[circuitKey]*inFlightHtlc) *peerController {
 
 	peerCfg, ok := p.limits.PerPeer[peer]
 	if !ok {
@@ -242,6 +250,24 @@ func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 		htlcs:     htlcs,
 		lnd:       p.client,
 		pubKey:    peer,
+		now:       time.Now,
+		htlcCompleted: func(ctx context.Context, htlc *HtlcInfo) error {
+			// If the add time of a htlc is zero, it was resumed after a LND
+			// restart. We don't store these htlcs because they have
+			// incomplete information (missing add time and amounts).
+			if htlc.addTime.IsZero() {
+				log.Debug("Not storing incomplete htlc resumed after "+
+					"restart: %v (%v) -> %v (%v)",
+					htlc.incomingCircuit.channel,
+					htlc.incomingCircuit.htlc,
+					htlc.outgoingCircuit.channel,
+					htlc.outgoingCircuit.htlc)
+
+				return nil
+			}
+
+			return p.db.RecordHtlcResolution(ctx, htlc)
+		},
 	}
 	ctrl := newPeerController(cfg)
 
@@ -291,14 +317,28 @@ func (p *process) eventLoop(ctx context.Context) error {
 			}
 
 		case resolvedEvent := <-p.resolveChan:
-			chanInfo, err := p.getChanInfo(resolvedEvent.channel)
+			chanInfo, err := p.getChanInfo(
+				resolvedEvent.incomingCircuitKey.channel,
+			)
 			if err != nil {
 				return err
 			}
 
 			ctrl := p.getPeerController(ctx, chanInfo.peer, group.Go)
 
-			if err := ctrl.resolved(ctx, resolvedEvent); err != nil {
+			// Lookup the outgoing peer to supplement the
+			// information on the resolved event.
+			chanInfo, err = p.getChanInfo(
+				resolvedEvent.outgoingCircuitKey.channel,
+			)
+			if err != nil {
+				return err
+			}
+
+			if err := ctrl.resolved(ctx, peerResolvedEvent{
+				resolvedEvent: resolvedEvent,
+				outgoingPeer:  chanInfo.peer,
+			}); err != nil {
 				return err
 			}
 
@@ -440,8 +480,10 @@ func (p *process) processInterceptor(ctx context.Context,
 
 		select {
 		case p.interceptChan <- interceptEvent{
-			circuitKey: key,
-			resume:     resume,
+			circuitKey:   key,
+			incomingMsat: event.incomingMsat,
+			outgoingMsat: event.outgoingMsat,
+			resume:       resume,
 		}:
 
 		case <-ctx.Done():

@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/macaroons"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"go.uber.org/zap"
@@ -68,10 +70,15 @@ func (h *lndHtlcEventsClient) recvInternal() (*resolvedEvent, error) {
 
 	return &resolvedEvent{
 		settled: settled,
-		circuitKey: circuitKey{
+		incomingCircuitKey: circuitKey{
 			channel: event.IncomingChannelId,
 			htlc:    event.IncomingHtlcId,
 		},
+		outgoingCircuitKey: circuitKey{
+			channel: event.OutgoingChannelId,
+			htlc:    event.OutgoingHtlcId,
+		},
+		timestamp: time.Unix(0, int64(event.TimestampNs)),
 	}, nil
 }
 
@@ -98,7 +105,9 @@ type lndHtlcInterceptorClient struct {
 }
 
 type interceptedEvent struct {
-	circuitKey circuitKey
+	circuitKey   circuitKey
+	incomingMsat lnwire.MilliSatoshi
+	outgoingMsat lnwire.MilliSatoshi
 }
 
 func (h *lndHtlcInterceptorClient) recv() (*interceptedEvent, error) {
@@ -112,6 +121,8 @@ func (h *lndHtlcInterceptorClient) recv() (*interceptedEvent, error) {
 			channel: event.IncomingCircuitKey.ChanId,
 			htlc:    event.IncomingCircuitKey.HtlcId,
 		},
+		incomingMsat: lnwire.MilliSatoshi(event.IncomingAmountMsat),
+		outgoingMsat: lnwire.MilliSatoshi(event.OutgoingAmountMsat),
 	}, nil
 }
 
@@ -297,7 +308,7 @@ func (l *lndclientGrpc) getNodeAlias(key route.Vertex) (string, error) {
 }
 
 func (l *lndclientGrpc) getPendingIncomingHtlcs(ctx context.Context, peer *route.Vertex) (
-	map[route.Vertex]map[circuitKey]struct{}, error) {
+	map[route.Vertex]map[circuitKey]*inFlightHtlc, error) {
 
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
@@ -312,7 +323,7 @@ func (l *lndclientGrpc) getPendingIncomingHtlcs(ctx context.Context, peer *route
 		return nil, err
 	}
 
-	allHtlcs := make(map[route.Vertex]map[circuitKey]struct{})
+	allHtlcs := make(map[route.Vertex]map[circuitKey]*inFlightHtlc)
 	for _, channel := range resp.Channels {
 		peer, err := route.NewVertexFromStr(channel.RemotePubkey)
 		if err != nil {
@@ -321,7 +332,7 @@ func (l *lndclientGrpc) getPendingIncomingHtlcs(ctx context.Context, peer *route
 
 		htlcs, ok := allHtlcs[peer]
 		if !ok {
-			htlcs = make(map[circuitKey]struct{})
+			htlcs = make(map[circuitKey]*inFlightHtlc)
 			allHtlcs[peer] = htlcs
 		}
 
@@ -335,7 +346,10 @@ func (l *lndclientGrpc) getPendingIncomingHtlcs(ctx context.Context, peer *route
 				htlc:    htlc.HtlcIndex,
 			}
 
-			htlcs[key] = struct{}{}
+			// Note: we cannot easily recover added timestamp or incoming
+			// and outgoing amounts on resume, so we leave these values as
+			// zero to indicate that they are unknown due to restart.
+			htlcs[key] = &inFlightHtlc{}
 		}
 	}
 

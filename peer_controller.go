@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/paulbellamy/ratecounter"
 	"go.uber.org/zap"
@@ -58,23 +59,36 @@ type peerController struct {
 	limiter         *rate.Limiter
 	logger          *zap.SugaredLogger
 	interceptChan   chan peerInterceptEvent
-	resolvedChan    chan resolvedEvent
+	resolvedChan    chan peerResolvedEvent
 	updateLimitChan chan Limit
 	getStateChan    chan chan *peerState
 
 	rateCounters []*eventCounter
 
-	htlcs map[circuitKey]struct{}
+	htlcs map[circuitKey]*inFlightHtlc
 
 	lastChannelSync time.Time
 	pubKey          route.Vertex
 	lnd             lndclient
+	now             func() time.Time
+	htlcCompleted   func(context.Context, *HtlcInfo) error
+}
+
+type inFlightHtlc struct {
+	addedTs      time.Time
+	incomingMsat lnwire.MilliSatoshi
+	outgoingMsat lnwire.MilliSatoshi
 }
 
 type peerInterceptEvent struct {
 	interceptEvent
 
 	peerInitiated bool
+}
+
+type peerResolvedEvent struct {
+	resolvedEvent
+	outgoingPeer route.Vertex
 }
 
 type peerState struct {
@@ -90,12 +104,14 @@ type rateCounts struct {
 var rateCounterIntervals = []time.Duration{time.Hour, 24 * time.Hour}
 
 type peerControllerCfg struct {
-	logger    *zap.SugaredLogger
-	limit     Limit
-	burstSize int
-	htlcs     map[circuitKey]struct{}
-	lnd       lndclient
-	pubKey    route.Vertex
+	logger        *zap.SugaredLogger
+	limit         Limit
+	burstSize     int
+	htlcs         map[circuitKey]*inFlightHtlc
+	lnd           lndclient
+	pubKey        route.Vertex
+	now           func() time.Time
+	htlcCompleted func(context.Context, *HtlcInfo) error
 }
 
 func newPeerController(cfg *peerControllerCfg) *peerController {
@@ -126,14 +142,16 @@ func newPeerController(cfg *peerControllerCfg) *peerController {
 		limiter:         limiter,
 		logger:          logger,
 		interceptChan:   make(chan peerInterceptEvent),
-		resolvedChan:    make(chan resolvedEvent),
+		resolvedChan:    make(chan peerResolvedEvent),
 		updateLimitChan: make(chan Limit),
 		getStateChan:    make(chan chan *peerState),
 		htlcs:           cfg.htlcs,
 		rateCounters:    rateCounters,
 		lnd:             cfg.lnd,
 		pubKey:          cfg.pubKey,
-		lastChannelSync: time.Now(),
+		lastChannelSync: cfg.now(),
+		now:             cfg.now,
+		htlcCompleted:   cfg.htlcCompleted,
 	}
 }
 
@@ -193,7 +211,7 @@ func (p *peerController) syncPendingHtlcs(ctx context.Context) (bool, error) {
 
 	htlcs := allHtlcs[p.pubKey]
 
-	p.lastChannelSync = time.Now()
+	p.lastChannelSync = p.now()
 
 	deletes := false
 	for key := range p.htlcs {
@@ -203,9 +221,9 @@ func (p *peerController) syncPendingHtlcs(ctx context.Context) (bool, error) {
 			}
 		}
 
-		// Htlc is no longer pending on incoming side. Must have missed
-		// an htlc event. Clear it from our list.
-		delete(p.htlcs, key)
+		// Htlc is no longer pending on incoming side. Must have missed an htlc
+		// event. Clear it from our list.
+		p.markHtlcComplete(ctx, key, nil)
 
 		logger := p.keyLogger(key)
 		logger.Infow("Cleaning up dangling htlc")
@@ -345,7 +363,7 @@ func (p *peerController) run(ctx context.Context) error {
 		// An htlc has been resolved in lnd. Remove it from the pending htlcs
 		// map to free up the slot for another htlc.
 		case resolvedEvent := <-p.resolvedChan:
-			key := resolvedEvent.circuitKey
+			key := resolvedEvent.incomingCircuitKey
 
 			_, ok := p.htlcs[key]
 			if !ok {
@@ -355,7 +373,7 @@ func (p *peerController) run(ctx context.Context) error {
 				continue
 			}
 
-			delete(p.htlcs, key)
+			p.markHtlcComplete(ctx, key, &resolvedEvent)
 
 			// Update rate counters.
 			if resolvedEvent.settled {
@@ -394,6 +412,45 @@ func (p *peerController) run(ctx context.Context) error {
 	}
 }
 
+// markHtlcComplete removes the resolved htlc provided from the peerController's
+// inFlight set and reports the completed htlc.
+func (p *peerController) markHtlcComplete(ctx context.Context, key circuitKey,
+	resolution *peerResolvedEvent) {
+
+	// Lookup the HLTC to get its timestamp.
+	inFlight, ok := p.htlcs[key]
+	if !ok {
+		return
+	}
+
+	// Remove from our list of active HTLCs.
+	delete(p.htlcs, key)
+
+	// If no resolution is provided, we don't know the outcome of this HTLC (we
+	// re-synced and it was no longer present), so there is no further action to
+	// take.
+	if resolution == nil {
+		return
+	}
+
+	// Track available HTLC information and report to handler.
+	htlcInfo := &HtlcInfo{
+		addTime:         inFlight.addedTs,
+		resolveTime:     resolution.timestamp,
+		settled:         resolution.settled,
+		incomingMsat:    inFlight.incomingMsat,
+		outgoingMsat:    inFlight.outgoingMsat,
+		incomingCircuit: key,
+		outgoingCircuit: resolution.outgoingCircuitKey,
+		incomingPeer:    p.pubKey,
+		outgoingPeer:    resolution.outgoingPeer,
+	}
+
+	if err := p.htlcCompleted(ctx, htlcInfo); err != nil {
+		p.logger.Infof("Mark htlc complete failed: %v", err)
+	}
+}
+
 func (p *peerController) incrCounter(event eventType) {
 	for _, counter := range p.rateCounters {
 		counter.Incr(event)
@@ -409,7 +466,11 @@ func getRate(maxHourlyRate int64) rate.Limit {
 }
 
 func (p *peerController) forward(event interceptEvent) error {
-	p.htlcs[event.circuitKey] = struct{}{}
+	p.htlcs[event.circuitKey] = &inFlightHtlc{
+		addedTs:      p.now(),
+		incomingMsat: event.incomingMsat,
+		outgoingMsat: event.outgoingMsat,
+	}
 
 	err := event.resume(true)
 	if err != nil {
@@ -435,7 +496,7 @@ func (p *peerController) process(ctx context.Context,
 }
 
 func (p *peerController) resolved(ctx context.Context,
-	key resolvedEvent) error {
+	key peerResolvedEvent) error {
 
 	select {
 	case p.resolvedChan <- key:
