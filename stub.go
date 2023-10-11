@@ -43,6 +43,7 @@ var stubNodes = []string{
 
 type stubChannel struct {
 	initiator bool
+	closed    bool
 }
 
 type stubInFlight struct {
@@ -101,8 +102,13 @@ func newStubClient(ctx context.Context) *stubLndClient {
 		channelCount := int(key[5]%5) + 1
 		for i := 0; i < channelCount; i++ {
 			initiator := key[6+i]%2 == 0
+
+			// Make this a closed channel 10% of the time.
+			closed := rand.Intn(10) == 0 //nolint: gosec
+
 			channels[chanId] = &stubChannel{
 				initiator: initiator,
+				closed:    closed,
 			}
 
 			chanMap[chanId] = key
@@ -322,9 +328,17 @@ func (s *stubLndClient) getInfo() (*info, error) {
 }
 
 func (s *stubLndClient) listChannels() (map[uint64]*channel, error) {
+	return s.getChannels(false), nil
+}
+
+func (s *stubLndClient) getChannels(closed bool) map[uint64]*channel {
 	allChannels := make(map[uint64]*channel)
 	for key, peer := range s.peers {
 		for chanId, ch := range peer.channels {
+			if (ch.closed || closed) && !(ch.closed && closed) {
+				continue
+			}
+
 			allChannels[chanId] = &channel{
 				peer:      key,
 				initiator: ch.initiator,
@@ -332,11 +346,11 @@ func (s *stubLndClient) listChannels() (map[uint64]*channel, error) {
 		}
 	}
 
-	return allChannels, nil
+	return allChannels
 }
 
 func (s *stubLndClient) listClosedChannels() (map[uint64]*channel, error) {
-	return make(map[uint64]*channel), nil
+	return s.getChannels(true), nil
 }
 
 func (s *stubLndClient) getNodeAlias(key route.Vertex) (string, error) {
