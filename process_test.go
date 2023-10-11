@@ -366,3 +366,58 @@ func TestBlocked(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, <-exit, context.Canceled)
 }
+
+// TestChannelNotFound tests that we hit a deadlock when:
+//   - We are running process.eventLoop in a go group which means that it'll cancel
+//     context on error from any member of the group.
+//   - Inside of process.eventLoop, we spin up a set of peerControlers in a secondary go
+//     group that rely on the parent context (associated with the top level group) for
+//     cancellation.
+//   - There is an error in eventLoop due to an unknown channel, which prompts it to
+//     return.
+//   - The defer function waits for the peerController group to exit.
+//   - Since the top level context will only be cancelled when eventLoop successfully
+//     exits (because receiving the error will cancel ctx), we hit a deadlock:
+//     -> eventLoop is waiting for all peerControllers to exit on a canceled context to
+//     return an error.
+//     -> the group is waiting on eventLoop to return an error to cancel context.
+func TestChannelNotFound(t *testing.T) {
+	client := newLndclientMock(testChannels)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	db, cleanup := setupTestDb(t)
+	defer cleanup()
+
+	log := zaptest.NewLogger(t).Sugar()
+
+	cfg := &Limits{}
+
+	p := NewProcess(client, log, cfg, db)
+
+	exit := make(chan error)
+
+	go func() {
+		exit <- p.Run(ctx)
+	}()
+
+	// Next, send a htlc that is from an unknown channel.
+	key := circuitKey{
+		channel: 99,
+		htlc:    4,
+	}
+	client.htlcInterceptorRequests <- &interceptedEvent{
+		circuitKey: key,
+	}
+
+	// This is an inelegant way to demonstrate our hang, because the unit test will
+	// take 10 seconds to run, but it shows that we're not exiting cleanly when we
+	// error in eventLoop.
+	select {
+	case err := <-exit:
+		t.Fatalf("unexpected error: %v", err)
+
+	case <-time.After(time.Second * 10):
+	}
+}
