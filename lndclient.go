@@ -255,6 +255,49 @@ func (l *lndclientGrpc) listChannels() (map[uint64]*channel, error) {
 	return chans, nil
 }
 
+func (l *lndclientGrpc) listClosedChannels() (map[uint64]*channel, error) {
+	ctx, cancel := context.WithTimeout(ctxb, rpcTimeout)
+	defer cancel()
+
+	resp, err := l.main.ClosedChannels(ctx, &lnrpc.ClosedChannelsRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	chans := make(map[uint64]*channel)
+	for _, rpcChan := range resp.Channels {
+		peer, err := route.NewVertexFromStr(rpcChan.RemotePubkey)
+		if err != nil {
+			return nil, err
+		}
+
+		channel := &channel{
+			peer: peer,
+		}
+
+		// LND didn't always store who initiated the channel, so in some cases
+		// we don't know who initiated the channel (for very old channels). We're
+		// unlikely to hit this case since we're dealing with channels related
+		// to current forwards, so we just log that we don't know this value and
+		// allow initiator to be true.
+		switch rpcChan.OpenInitiator {
+		case lnrpc.Initiator_INITIATOR_LOCAL:
+			channel.initiator = true
+
+		case lnrpc.Initiator_INITIATOR_REMOTE:
+
+		default:
+			channel.initiator = true
+			log.Debugf("Channel initiator for %v with %v unknown",
+				rpcChan.ChanId, peer)
+		}
+
+		chans[rpcChan.ChanId] = channel
+	}
+
+	return chans, nil
+}
+
 func (l *lndclientGrpc) subscribeHtlcEvents(ctx context.Context) (
 	htlcEventsClient, error) {
 

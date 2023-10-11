@@ -335,6 +335,10 @@ func (s *stubLndClient) listChannels() (map[uint64]*channel, error) {
 	return allChannels, nil
 }
 
+func (s *stubLndClient) listClosedChannels() (map[uint64]*channel, error) {
+	return make(map[uint64]*channel), nil
+}
+
 func (s *stubLndClient) getNodeAlias(key route.Vertex) (string, error) {
 	peer, ok := s.peers[key]
 	if !ok {

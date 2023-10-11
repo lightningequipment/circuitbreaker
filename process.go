@@ -26,6 +26,8 @@ type lndclient interface {
 
 	listChannels() (map[uint64]*channel, error)
 
+	listClosedChannels() (map[uint64]*channel, error)
+
 	getNodeAlias(key route.Vertex) (string, error)
 
 	subscribeHtlcEvents(ctx context.Context) (htlcEventsClient, error)

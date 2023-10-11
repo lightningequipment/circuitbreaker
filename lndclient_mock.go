@@ -50,6 +50,10 @@ func (l *lndclientMock) listChannels() (map[uint64]*channel, error) {
 	return l.channels, nil
 }
 
+func (l *lndclientMock) listClosedChannels() (map[uint64]*channel, error) {
+	return make(map[uint64]*channel), nil
+}
+
 func (l *lndclientMock) subscribeHtlcEvents(ctx context.Context) (
 	htlcEventsClient, error) {
 
