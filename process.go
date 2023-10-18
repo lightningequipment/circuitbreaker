@@ -15,6 +15,8 @@ import (
 var (
 	rpcTimeout                 = 10 * time.Second
 	defaultPeerRefreshInterval = 10 * time.Minute
+
+	errChannelNotFound = errors.New("channel not found")
 )
 
 const burstSize = 10
@@ -180,7 +182,7 @@ func (p *process) Run(ctx context.Context) error {
 	})
 
 	group.Go(func() error {
-		return p.eventLoop(ctx)
+		return p.runEventLoop(ctx)
 	})
 
 	return group.Wait()
@@ -280,13 +282,20 @@ func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 	return ctrl
 }
 
-func (p *process) eventLoop(ctx context.Context) error {
-	// Create a group to attach peer goroutines to.
+func (p *process) runEventLoop(ctx context.Context) error {
 	group, ctx := errgroup.WithContext(ctx)
-	defer func() {
-		_ = group.Wait()
-	}()
 
+	// Event loop will spin up new goroutines using the group that is passed in here.
+	// We run it in the same group so that both errors in eventLoop and those in
+	// the goroutines that is spins will will prompt exit.
+	group.Go(func() error {
+		return p.eventLoop(ctx, group)
+	})
+
+	return group.Wait()
+}
+
+func (p *process) eventLoop(ctx context.Context, group *errgroup.Group) error {
 	// Retrieve all pending htlcs from lnd.
 	htlcsPerPeer, err := p.client.getPendingIncomingHtlcs(ctx, nil)
 	if err != nil {
@@ -516,5 +525,5 @@ func (p *process) getChanInfo(channel uint64) (*channel, error) {
 	}
 
 	// Channel not found.
-	return nil, fmt.Errorf("incoming channel %v not found", channel)
+	return nil, fmt.Errorf("%w: %v", errChannelNotFound, channel)
 }

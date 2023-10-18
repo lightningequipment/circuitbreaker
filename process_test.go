@@ -367,20 +367,8 @@ func TestBlocked(t *testing.T) {
 	require.ErrorIs(t, <-exit, context.Canceled)
 }
 
-// TestChannelNotFound tests that we hit a deadlock when:
-//   - We are running process.eventLoop in a go group which means that it'll cancel
-//     context on error from any member of the group.
-//   - Inside of process.eventLoop, we spin up a set of peerControlers in a secondary go
-//     group that rely on the parent context (associated with the top level group) for
-//     cancellation.
-//   - There is an error in eventLoop due to an unknown channel, which prompts it to
-//     return.
-//   - The defer function waits for the peerController group to exit.
-//   - Since the top level context will only be cancelled when eventLoop successfully
-//     exits (because receiving the error will cancel ctx), we hit a deadlock:
-//     -> eventLoop is waiting for all peerControllers to exit on a canceled context to
-//     return an error.
-//     -> the group is waiting on eventLoop to return an error to cancel context.
+// TestChannelNotFound tests that we'll successfully exit when we cannot lookup the
+// channel that a htlc belongs to.
 func TestChannelNotFound(t *testing.T) {
 	client := newLndclientMock(testChannels)
 
@@ -411,13 +399,11 @@ func TestChannelNotFound(t *testing.T) {
 		circuitKey: key,
 	}
 
-	// This is an inelegant way to demonstrate our hang, because the unit test will
-	// take 10 seconds to run, but it shows that we're not exiting cleanly when we
-	// error in eventLoop.
 	select {
 	case err := <-exit:
-		t.Fatalf("unexpected error: %v", err)
+		require.ErrorIs(t, err, errChannelNotFound)
 
 	case <-time.After(time.Second * 10):
+		t.Fatalf("timeout on process error")
 	}
 }
