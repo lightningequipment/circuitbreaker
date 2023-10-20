@@ -33,11 +33,11 @@ const (
 )
 
 func testProcess(t *testing.T, event resolveEvent) {
-	client := newLndclientMock(testChannels)
+	client := newLndclientMock(testChannels, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	log := zaptest.NewLogger(t).Sugar()
@@ -114,7 +114,7 @@ func TestLimits(t *testing.T) {
 func testRateLimit(t *testing.T, mode Mode) {
 	defer Timeout()()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	cfg := &Limits{
@@ -130,7 +130,7 @@ func testRateLimit(t *testing.T, mode Mode) {
 		},
 	}
 
-	client := newLndclientMock(testChannels)
+	client := newLndclientMock(testChannels, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -204,7 +204,7 @@ func testRateLimit(t *testing.T, mode Mode) {
 func testMaxPending(t *testing.T, mode Mode) {
 	defer Timeout()()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	cfg := &Limits{
@@ -222,7 +222,7 @@ func testMaxPending(t *testing.T, mode Mode) {
 		},
 	}
 
-	client := newLndclientMock(testChannels)
+	client := newLndclientMock(testChannels, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -278,12 +278,12 @@ func testMaxPending(t *testing.T, mode Mode) {
 
 func TestNewPeer(t *testing.T) {
 	// Initialize lnd with test channels.
-	client := newLndclientMock(testChannels)
+	client := newLndclientMock(testChannels, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	log := zaptest.NewLogger(t).Sugar()
@@ -323,7 +323,7 @@ func TestNewPeer(t *testing.T) {
 func TestBlocked(t *testing.T) {
 	defer Timeout()()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	cfg := &Limits{
@@ -335,7 +335,7 @@ func TestBlocked(t *testing.T) {
 		},
 	}
 
-	client := newLndclientMock(testChannels)
+	client := newLndclientMock(testChannels, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -370,12 +370,12 @@ func TestBlocked(t *testing.T) {
 // TestChannelNotFound tests that we'll successfully exit when we cannot lookup the
 // channel that a htlc belongs to.
 func TestChannelNotFound(t *testing.T) {
-	client := newLndclientMock(testChannels)
+	client := newLndclientMock(testChannels, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, cleanup := setupTestDb(t)
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
 	defer cleanup()
 
 	log := zaptest.NewLogger(t).Sugar()
@@ -406,4 +406,48 @@ func TestChannelNotFound(t *testing.T) {
 	case <-time.After(time.Second * 10):
 		t.Fatalf("timeout on process error")
 	}
+}
+
+// TestClosedChannelHtlc tests that we can handle intercepted htlcs that are associated
+// with closed channels.
+func TestClosedChannelHtlc(t *testing.T) {
+	// Initialize lnd with a closed channel.
+	var testClosedChannels = map[uint64]*channel{
+		5: {peer: route.Vertex{2}},
+	}
+	client := newLndclientMock(testChannels, testClosedChannels)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
+	defer cleanup()
+
+	log := zaptest.NewLogger(t).Sugar()
+
+	cfg := &Limits{}
+
+	p := NewProcess(client, log, cfg, db)
+
+	exit := make(chan error)
+
+	go func() {
+		exit <- p.Run(ctx)
+	}()
+
+	// Send a htlc that is from a closed channel, it should be given the go-ahead to
+	// resume.
+	key := circuitKey{
+		channel: 5,
+		htlc:    3,
+	}
+	client.htlcInterceptorRequests <- &interceptedEvent{
+		circuitKey: key,
+	}
+
+	resp := <-client.htlcInterceptorResponses
+	require.Equal(t, key, resp.key)
+
+	cancel()
+	require.ErrorIs(t, <-exit, context.Canceled)
 }

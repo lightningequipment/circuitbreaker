@@ -43,6 +43,7 @@ var stubNodes = []string{
 
 type stubChannel struct {
 	initiator bool
+	closed    bool
 }
 
 type stubInFlight struct {
@@ -81,7 +82,7 @@ type stubPeer struct {
 	alias    string
 }
 
-func newStubClient() *stubLndClient {
+func newStubClient(ctx context.Context) *stubLndClient {
 	peers := make(map[route.Vertex]*stubPeer)
 	chanMap := make(map[uint64]route.Vertex)
 	pendingHtlcs := make(map[circuitKey]*stubInFlight)
@@ -101,8 +102,13 @@ func newStubClient() *stubLndClient {
 		channelCount := int(key[5]%5) + 1
 		for i := 0; i < channelCount; i++ {
 			initiator := key[6+i]%2 == 0
+
+			// Make this a closed channel 10% of the time.
+			closed := rand.Intn(10) == 0 //nolint: gosec
+
 			channels[chanId] = &stubChannel{
 				initiator: initiator,
+				closed:    closed,
 			}
 
 			chanMap[chanId] = key
@@ -154,21 +160,21 @@ func newStubClient() *stubLndClient {
 			channels = append(channels, channel)
 		}
 
-		go client.generateHtlcs(key, peer, channels)
+		go client.generateHtlcs(ctx, key, peer, channels)
 	}
 
-	go client.run()
+	go client.run(ctx)
 
 	return client
 }
 
-func (s *stubLndClient) run() {
+func (s *stubLndClient) run(ctx context.Context) {
 	for resp := range s.interceptResponseChan {
-		go s.resolveHtlc(resp)
+		go s.resolveHtlc(ctx, resp)
 	}
 }
 
-func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
+func (s *stubLndClient) resolveHtlc(ctx context.Context, resp *interceptResponse) {
 	s.pendingHtlcsLock.Lock()
 	inFlight, ok := s.pendingHtlcs[resp.key]
 	s.pendingHtlcsLock.Unlock()
@@ -177,11 +183,15 @@ func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
 	}
 
 	if !resp.resume {
-		s.eventChan <- &resolvedEvent{
+		select {
+		case s.eventChan <- &resolvedEvent{
 			incomingCircuitKey: resp.key,
 			settled:            false,
 			timestamp:          time.Now(),
 			outgoingCircuitKey: inFlight.keyOut,
+		}:
+		case <-ctx.Done():
+			return
 		}
 
 		return
@@ -213,11 +223,15 @@ func (s *stubLndClient) resolveHtlc(resp *interceptResponse) {
 
 	settled := rand.Int31n(100) < settledPerc //nolint: gosec
 
-	s.eventChan <- &resolvedEvent{
+	select {
+	case s.eventChan <- &resolvedEvent{
 		incomingCircuitKey: resp.key,
 		outgoingCircuitKey: inFlight.keyOut,
 		settled:            settled,
 		timestamp:          time.Now(),
+	}:
+	case <-ctx.Done():
+		return
 	}
 
 	s.pendingHtlcsLock.Lock()
@@ -242,7 +256,7 @@ func randomDelay(profile int) time.Duration {
 		time.Millisecond
 }
 
-func (s *stubLndClient) generateHtlcs(key route.Vertex, peer *stubPeer,
+func (s *stubLndClient) generateHtlcs(ctx context.Context, key route.Vertex, peer *stubPeer,
 	outgoingChannels []uint64) {
 
 	log.Infow("Starting stub", "peer", peer.alias)
@@ -284,15 +298,24 @@ func (s *stubLndClient) generateHtlcs(key route.Vertex, peer *stubPeer,
 			outgoingAmount = incomingAmount
 		}
 
-		s.interceptRequestChan <- &interceptedEvent{
+		select {
+		case s.interceptRequestChan <- &interceptedEvent{
 			circuitKey:   circuitKeyIn,
 			incomingMsat: lnwire.MilliSatoshi(incomingAmount),
 			outgoingMsat: lnwire.MilliSatoshi(outgoingAmount),
+		}:
+		case <-ctx.Done():
+			return
 		}
 
 		htlcId++
 
-		time.Sleep(randomDelay(delayProfile))
+		select {
+		case <-time.After(randomDelay(delayProfile)):
+
+		case <-ctx.Done():
+			break
+		}
 	}
 }
 
@@ -305,9 +328,17 @@ func (s *stubLndClient) getInfo() (*info, error) {
 }
 
 func (s *stubLndClient) listChannels() (map[uint64]*channel, error) {
+	return s.getChannels(false), nil
+}
+
+func (s *stubLndClient) getChannels(closed bool) map[uint64]*channel {
 	allChannels := make(map[uint64]*channel)
 	for key, peer := range s.peers {
 		for chanId, ch := range peer.channels {
+			if (ch.closed || closed) && !(ch.closed && closed) {
+				continue
+			}
+
 			allChannels[chanId] = &channel{
 				peer:      key,
 				initiator: ch.initiator,
@@ -315,7 +346,11 @@ func (s *stubLndClient) listChannels() (map[uint64]*channel, error) {
 		}
 	}
 
-	return allChannels, nil
+	return allChannels
+}
+
+func (s *stubLndClient) listClosedChannels() (map[uint64]*channel, error) {
+	return s.getChannels(true), nil
 }
 
 func (s *stubLndClient) getNodeAlias(key route.Vertex) (string, error) {

@@ -27,16 +27,18 @@ type lndclientMock struct {
 	htlcInterceptorRequests  chan *interceptedEvent
 	htlcInterceptorResponses chan *interceptResponse
 
-	channels map[uint64]*channel
+	channels       map[uint64]*channel
+	closedChannels map[uint64]*channel
 }
 
-func newLndclientMock(channels map[uint64]*channel) *lndclientMock {
+func newLndclientMock(channels, closedChannels map[uint64]*channel) *lndclientMock {
 	return &lndclientMock{
 		htlcEvents:               make(chan *resolvedEvent),
 		htlcInterceptorRequests:  make(chan *interceptedEvent),
 		htlcInterceptorResponses: make(chan *interceptResponse),
 
-		channels: channels,
+		channels:       channels,
+		closedChannels: closedChannels,
 	}
 }
 
@@ -48,6 +50,10 @@ func (l *lndclientMock) getInfo() (*info, error) {
 
 func (l *lndclientMock) listChannels() (map[uint64]*channel, error) {
 	return l.channels, nil
+}
+
+func (l *lndclientMock) listClosedChannels() (map[uint64]*channel, error) {
+	return l.closedChannels, nil
 }
 
 func (l *lndclientMock) subscribeHtlcEvents(ctx context.Context) (

@@ -26,6 +26,8 @@ type lndclient interface {
 
 	listChannels() (map[uint64]*channel, error)
 
+	listClosedChannels() (map[uint64]*channel, error)
+
 	getNodeAlias(key route.Vertex) (string, error)
 
 	subscribeHtlcEvents(ctx context.Context) (htlcEventsClient, error)
@@ -519,6 +521,23 @@ func (p *process) getChanInfo(channel uint64) (*channel, error) {
 	}
 
 	// Try looking up the channel again.
+	ch, ok = p.chanMap[channel]
+	if ok {
+		return ch, nil
+	}
+
+	// If the channel is not open, fall back to checking our closed
+	// channels.
+	closedChannels, err := p.client.listClosedChannels()
+	if err != nil {
+		return nil, err
+	}
+
+	// Add to cache and try again.
+	for chanId, ch := range closedChannels {
+		p.chanMap[chanId] = ch
+	}
+
 	ch, ok = p.chanMap[channel]
 	if ok {
 		return ch, nil
