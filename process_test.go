@@ -366,3 +366,44 @@ func TestBlocked(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, <-exit, context.Canceled)
 }
+
+// TestChannelNotFound tests that we'll successfully exit when we cannot lookup the
+// channel that a htlc belongs to.
+func TestChannelNotFound(t *testing.T) {
+	client := newLndclientMock(testChannels)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	db, cleanup := setupTestDb(t)
+	defer cleanup()
+
+	log := zaptest.NewLogger(t).Sugar()
+
+	cfg := &Limits{}
+
+	p := NewProcess(client, log, cfg, db)
+
+	exit := make(chan error)
+
+	go func() {
+		exit <- p.Run(ctx)
+	}()
+
+	// Next, send a htlc that is from an unknown channel.
+	key := circuitKey{
+		channel: 99,
+		htlc:    4,
+	}
+	client.htlcInterceptorRequests <- &interceptedEvent{
+		circuitKey: key,
+	}
+
+	select {
+	case err := <-exit:
+		require.ErrorIs(t, err, errChannelNotFound)
+
+	case <-time.After(time.Second * 10):
+		t.Fatalf("timeout on process error")
+	}
+}
