@@ -14,7 +14,7 @@ func setupTestDb(t *testing.T, fwdingHistoryLimit int) (*Db, func()) {
 	file, err := os.CreateTemp("", "test_db_")
 	require.NoError(t, err)
 
-	db, err := NewDb(file.Name(), fwdingHistoryLimit)
+	db, err := NewDb(context.Background(), file.Name(), fwdingHistoryLimit)
 	require.NoError(t, err)
 
 	return db, func() {
@@ -126,6 +126,31 @@ func TestDbNoForwardingHistory(t *testing.T) {
 	require.NoError(t, db.RecordHtlcResolution(ctx, htlc))
 
 	fwds, err := db.ListForwardingHistory(ctx, time.Time{}, time.Unix(1000000, 0))
+	require.NoError(t, err)
+	require.Len(t, fwds, 0)
+}
+
+func TestForwadingHistoryDelete(t *testing.T) {
+	// Create a db that will store HTLCs.
+	ctx := context.Background()
+	db, cleanup := setupTestDb(t, 5)
+	defer cleanup()
+
+	// Write a test HTLC and assert that it's stored.
+	htlc := testHtlc(1)
+	require.NoError(t, db.RecordHtlcResolution(ctx, htlc))
+
+	fwds, err := db.ListForwardingHistory(ctx, time.Time{}, time.Unix(1000000, 0))
+	require.NoError(t, err)
+	require.Len(t, fwds, 1)
+
+	// Modify the db to have a zero limit on forwarding history. We don't recreate
+	// the test db because it would re-create the file. Run limitHTLCRecords once
+	// (as we would on NewDb) to assert that we clean up our records.
+	db.fwdHistoryLimit = 0
+	require.NoError(t, db.limitHTLCRecords(ctx))
+
+	fwds, err = db.ListForwardingHistory(ctx, time.Time{}, time.Unix(1000000, 0))
 	require.NoError(t, err)
 	require.Len(t, fwds, 0)
 }

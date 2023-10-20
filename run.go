@@ -43,7 +43,7 @@ func run(c *cli.Context) error {
 	log.Infow("Opening database", "path", dbPath)
 
 	// Open database.
-	db, err := NewDb(dbPath, c.Int("fwdhistorylimit"))
+	db, err := NewDb(ctx, dbPath, c.Int("fwdhistorylimit"))
 	if err != nil {
 		return err
 	}

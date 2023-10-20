@@ -96,7 +96,7 @@ type Db struct {
 	fwdHistoryLimit int
 }
 
-func NewDb(dbPath string, fwdHistoryLimit int) (*Db, error) {
+func NewDb(ctx context.Context, dbPath string, fwdHistoryLimit int) (*Db, error) {
 	const busyTimeoutMs = 5000
 
 	dsn := dbPath + fmt.Sprintf("?_pragma=busy_timeout=%d", busyTimeoutMs)
@@ -117,6 +117,12 @@ func NewDb(dbPath string, fwdHistoryLimit int) (*Db, error) {
 	database := &Db{
 		db:              db,
 		fwdHistoryLimit: fwdHistoryLimit,
+	}
+
+	// Perform a once-off cleanup of the records in the db to update to a potential
+	// change in limit value.
+	if err := database.limitHTLCRecords(ctx); err != nil {
+		return nil, err
 	}
 
 	return database, nil
