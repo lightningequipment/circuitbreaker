@@ -2,6 +2,7 @@
   "cancel": "Cancel",
   "edit": "Edit",
   "edit-defaults": "Edit defaults",
+  "download-fwd-history": "Download forwarding history (json)",
   "max-hourly-rate": "Max hourly rate",
   "max-pending": "Max pending",
   "mode": "Mode",
