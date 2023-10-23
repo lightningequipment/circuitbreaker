@@ -1,14 +1,23 @@
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, Tooltip, IconButton } from '@mui/material';
+import DownloadIcon from '@mui/icons-material/Download';
 import Image from 'next/image';
 
 import { HEADER_HEIGHT_DESKTOP, HEADER_HEIGHT_MOBILE } from 'constant';
 import { useInfo } from 'hooks';
+import { useTranslation } from 'react-i18next';
 
 import NodeInfo from './NodeInfo';
 import DefaultLimits from './DefaultLimits';
 
+
 const Header = () => {
   const { info } = useInfo();
+  const { t } = useTranslation();
+
+  const openFwdHistory = () => {
+    const url = '/api/forwarding_history'; 
+    window.location.href = url;
+  };
 
   return (
     <Box
@@ -53,6 +62,23 @@ const Header = () => {
               }}
             />
             <NodeInfo />
+            <Box
+              sx={{
+                mx: 2,
+                backgroundColor: 'grey.700',
+                height: '4px',
+                width: '4px',
+                borderRadius: '50%',
+              }}
+            />
+            <Tooltip 
+              enterTouchDelay={0}
+              title={<Typography sx={{ color: 'black' }}>{t('download-fwd-history')}</Typography>}
+            >
+              <IconButton sx={{padding: 0, mt:0.5}} onClick={openFwdHistory}>
+                <DownloadIcon sx={{ color: '#5C6484' }}/>
+              </IconButton>
+            </Tooltip>
           </Box>
         </Box>
       </Box>
