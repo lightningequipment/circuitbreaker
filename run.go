@@ -25,6 +25,14 @@ import (
 
 var errUserExit = errors.New("user requested termination")
 
+// maxGrpcMsgSize is used when we configure both server and clients to allow sending and
+// receiving at most 32 MB GRPC messages.
+//
+// This value is based on the default number of forwarding history entries that we'll
+// store in the database, as this is the largest query we currently make (~13 MB of data)
+// plus some leeway for nodes that override this default to a larger value.
+const maxGrpcMsgSize = 32 * 1024 * 1024
+
 //go:embed all:webui-build
 var content embed.FS
 
@@ -93,6 +101,7 @@ func run(c *cli.Context) error {
 	p := NewProcess(client, log, limits, db)
 
 	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(maxGrpcMsgSize),
 		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer()),
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer()),
 	)
@@ -117,6 +126,9 @@ func run(c *cli.Context) error {
 		ctx,
 		listenAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(maxGrpcMsgSize),
+		),
 	)
 	if err != nil {
 		return err
