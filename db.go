@@ -82,9 +82,9 @@ const (
 	// to prevent creation of an ever-growing table.
 	//
 	// Justification for value:
-	// * ~100 bytes per row in the table.
-	// * Help ourselves to 10MB of disk space
-	// -> 100_000 entries
+	// * ~130 bytes per row in the table.
+	// * Help ourselves to 14MB of disk space
+	// -> 100_000 entries = 13 MB, plus ~0.8MB for add_time_index.
 	defaultFwdHistoryLimit = 100_000
 )
 
