@@ -21,7 +21,7 @@
     "@mui/icons-material": "^5.11.11",
     "@mui/material": "^5.11.11",
     "@tanstack/react-query": "^4.24.10",
-    "axios": "^0.24.0",
+    "axios": "^1.6.0",
     "date-fns": "^2.29.3",
     "i18next": "^22.4.12",
     "i18next-http-backend": "^2.2.0",
