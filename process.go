@@ -260,7 +260,7 @@ func (p *process) createPeerController(ctx context.Context, peer route.Vertex,
 			// restart. We don't store these htlcs because they have
 			// incomplete information (missing add time and amounts).
 			if htlc.addTime.IsZero() {
-				log.Debug("Not storing incomplete htlc resumed after "+
+				log.Debugf("Not storing incomplete htlc resumed after "+
 					"restart: %v (%v) -> %v (%v)",
 					htlc.incomingCircuit.channel,
 					htlc.incomingCircuit.htlc,
