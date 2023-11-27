@@ -408,6 +408,115 @@ func TestChannelNotFound(t *testing.T) {
 	}
 }
 
+// TestOutgoingChannelNotFound tests the case where the outgoing channel for a htlc is
+// not found in two cases:
+// 1. The HTLC was settled: the channel must exist, so we fail if it's not found
+// 2. The HTLC was failed: the outgoing channel could be bogus, so we handle the error
+func TestOutgoingChannelNotFound(t *testing.T) {
+	tests := []struct {
+		name          string
+		settled       bool
+		outgoingFound bool
+		err           error
+	}{
+		{
+			name:          "outgoing found, settled",
+			settled:       true,
+			outgoingFound: true,
+		},
+		{
+			name:          "outgoing found, not settled",
+			settled:       false,
+			outgoingFound: true,
+		},
+		{
+			name:          "outgoing not found, settled",
+			settled:       true,
+			outgoingFound: false,
+			err:           errChannelNotFound,
+		},
+		{
+			name:          "outgoing not found, not settled",
+			settled:       false,
+			outgoingFound: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			testLookupOutgoingChannel(
+				t, test.settled, test.outgoingFound, test.err,
+			)
+		})
+	}
+}
+
+func testLookupOutgoingChannel(t *testing.T, settled, outgoingFound bool,
+	exitErr error) {
+
+	client := newLndclientMock(testChannels, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	db, cleanup := setupTestDb(t, defaultFwdHistoryLimit)
+	defer cleanup()
+
+	log := zaptest.NewLogger(t).Sugar()
+
+	cfg := &Limits{}
+
+	p := NewProcess(client, log, cfg, db)
+
+	resolved := make(chan struct{})
+	p.resolvedCallback = func() {
+		close(resolved)
+	}
+
+	exit := make(chan error)
+	go func() {
+		exit <- p.Run(ctx)
+	}()
+
+	// Send a htlc with a known incoming channel.
+	key := circuitKey{
+		channel: 2,
+		htlc:    5,
+	}
+	client.htlcInterceptorRequests <- &interceptedEvent{
+		circuitKey: key,
+	}
+
+	resp := <-client.htlcInterceptorResponses
+	require.True(t, resp.resume)
+
+	// Set the outgoing channel based on whether we want it to be found by our
+	// lookup or not.
+	outgoingKey := outgoingKey
+	if !outgoingFound {
+		outgoingKey.channel = 9999
+	}
+
+	htlcEvent := &resolvedEvent{
+		incomingCircuitKey: key,
+		outgoingCircuitKey: outgoingKey,
+		settled:            settled,
+	}
+
+	client.htlcEvents <- htlcEvent
+
+	// If expected, assert that we exit with an error, otherwise ensure that the htlc
+	// is settled and we exit cleanly.
+	if exitErr != nil {
+		require.ErrorIs(t, <-exit, exitErr)
+	} else {
+		<-resolved
+
+		cancel()
+		require.ErrorIs(t, <-exit, context.Canceled)
+	}
+}
+
 // TestClosedChannelHtlc tests that we can handle intercepted htlcs that are associated
 // with closed channels.
 func TestClosedChannelHtlc(t *testing.T) {
