@@ -337,18 +337,35 @@ func (p *process) eventLoop(ctx context.Context, group *errgroup.Group) error {
 
 			ctrl := p.getPeerController(ctx, chanInfo.peer, group.Go)
 
-			// Lookup the outgoing peer to supplement the
-			// information on the resolved event.
+			// Lookup the outgoing peer to supplement the information on the
+			// resolved event. Here we handle a channel lookup error
+			// differently to the incoming channel, because it's possible
+			// we were forwarded a HTLC with a bogus outgoing channel. If
+			// this is the case, LND would have failed the HTLC back even if
+			// we let it through. We catch and log that error, rather than
+			// exiting like we do with incoming channels (where we reasonably
+			// expect to find the channel). We still enforce channel lookup
+			// for successful HTLCs, because then we know that the channel
+			// does exist and should be found.
+			var outgoingPeer *route.Vertex
 			chanInfo, err = p.getChanInfo(
 				resolvedEvent.outgoingCircuitKey.channel,
 			)
-			if err != nil {
+			switch {
+			case errors.Is(err, errChannelNotFound) && !resolvedEvent.settled:
+				log.Debugf("Channel not found for failed htlc: %v",
+					resolvedEvent.outgoingCircuitKey.channel)
+
+			case err != nil:
 				return err
+
+			default:
+				outgoingPeer = &chanInfo.peer
 			}
 
 			if err := ctrl.resolved(ctx, peerResolvedEvent{
 				resolvedEvent: resolvedEvent,
-				outgoingPeer:  chanInfo.peer,
+				outgoingPeer:  outgoingPeer,
 			}); err != nil {
 				return err
 			}
