@@ -37,7 +37,8 @@ const maxGrpcMsgSize = 32 * 1024 * 1024
 var content embed.FS
 
 func run(c *cli.Context) error {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	confDir := c.String("configdir")
 	err := os.MkdirAll(confDir, os.ModePerm)
