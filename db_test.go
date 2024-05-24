@@ -114,6 +114,8 @@ func testHtlc(i uint64) *HtlcInfo {
 			channel: 2,
 			htlc:    i,
 		},
+		incomingPeer: route.Vertex{9, 8, 7},
+		outgoingPeer: &route.Vertex{1, 2, 3},
 	}
 }
 
@@ -153,4 +155,58 @@ func TestForwadingHistoryDelete(t *testing.T) {
 	fwds, err = db.ListForwardingHistory(ctx, time.Time{}, time.Unix(1000000, 0))
 	require.NoError(t, err)
 	require.Len(t, fwds, 0)
+}
+
+// TestMigration4 tests the updates made to the forwarding_history table in migration 4:
+// - Allow nil outgoing peer values
+// - Allow non-unique outgoing_channel / index entries
+func TestMigration4(t *testing.T) {
+	// Create a db that will store HTLCs.
+	ctx := context.Background()
+	db, cleanup := setupTestDb(t, 5)
+	defer cleanup()
+
+	// Create a htlc with a nil outgoing peer.
+	noOutgoingPeer := &HtlcInfo{
+		addTime:      time.Unix(int64(100), 0),
+		resolveTime:  time.Unix(int64(200), 0),
+		settled:      true,
+		incomingMsat: 50,
+		outgoingMsat: 45,
+		incomingCircuit: circuitKey{
+			channel: 1,
+			htlc:    0,
+		},
+		outgoingCircuit: circuitKey{
+			channel: 2,
+			htlc:    0,
+		},
+		incomingPeer: route.Vertex{9, 8, 7},
+	}
+	require.NoError(t, db.RecordHtlcResolution(ctx, noOutgoingPeer))
+
+	// Create a htlc that has the same *outgoing* channel id and index.
+	dupOutgoing := &HtlcInfo{
+		addTime:      time.Unix(int64(101), 0),
+		resolveTime:  time.Unix(int64(201), 0),
+		settled:      false,
+		incomingMsat: 100,
+		outgoingMsat: 50,
+		incomingCircuit: circuitKey{
+			channel: 1,
+			htlc:    1,
+		},
+		outgoingCircuit: circuitKey{
+			channel: 2,
+			htlc:    0,
+		},
+		incomingPeer: route.Vertex{9, 8, 7},
+	}
+	require.NoError(t, db.RecordHtlcResolution(ctx, dupOutgoing))
+
+	htlcs := []*HtlcInfo{noOutgoingPeer, dupOutgoing}
+
+	fwds, err := db.ListForwardingHistory(ctx, time.Time{}, time.Unix(1000000, 0))
+	require.NoError(t, err)
+	require.Equal(t, htlcs, fwds)
 }

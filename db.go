@@ -74,6 +74,50 @@ var migrations = &migrate.MemoryMigrationSource{
 				`CREATE INDEX add_time_index ON forwarding_history (add_time);`,
 			},
 		},
+		{
+			// SQLite does not have powerful alter table commands, so we need
+			// to create a temporary table to update the following rules:
+			// - Allow outgoing_peer to be nil
+			// - Remove uniqueness constraint on outgoing_channel/outgoing_index
+			Id: "4",
+			Up: []string{
+				// Create new table with relaxed constraints.
+				`CREATE TABLE forwarding_history_new (
+                                        add_time TIMESTAMP NOT NULL,
+                                        resolved_time TIMESTAMP NOT NULL,
+                                        settled BOOLEAN NOT NULL,
+                                        incoming_amt_msat INTEGER NOT NULL CHECK (incoming_amt_msat > 0),
+                                        outgoing_amt_msat INTEGER NOT NULL CHECK (outgoing_amt_msat > 0),
+                                        incoming_peer TEXT NOT NULL,
+                                        incoming_channel INTEGER NOT NULL,
+                                        incoming_htlc_index INTEGER NOT NULL,
+                                        outgoing_peer TEXT,
+                                        outgoing_channel INTEGER NOT NULL,
+                                        outgoing_htlc_index INTEGER NOT NULL,
+
+                                        CONSTRAINT unique_incoming_circuit UNIQUE (incoming_channel, incoming_htlc_index)
+                                );`,
+				// Copy data into new table, replacing
+				// outgoing_peer with null when it has a zero
+				// value (serialized from an empty pubkey).
+				`INSERT INTO forwarding_history_new (
+                                        add_time, resolved_time, settled, incoming_amt_msat, outgoing_amt_msat,
+                                        incoming_peer, incoming_channel, incoming_htlc_index,
+                                        outgoing_peer, outgoing_channel, outgoing_htlc_index
+                                )
+                                SELECT 
+                                        add_time, resolved_time, settled, incoming_amt_msat, outgoing_amt_msat, 
+                                        incoming_peer, incoming_channel, incoming_htlc_index, 
+                                        outgoing_peer, outgoing_channel, outgoing_htlc_index
+                                FROM forwarding_history;`,
+				// Drop the old table.
+				`DROP TABLE forwarding_history;`,
+				// Rename the temporary table to original name.
+				`ALTER TABLE forwarding_history_new RENAME TO forwarding_history;`,
+				// Add index on add_time for new table.
+				`CREATE INDEX add_time_index ON forwarding_history (add_time);`,
+			},
+		},
 	},
 }
 
@@ -237,7 +281,7 @@ type HtlcInfo struct {
 	incomingMsat    lnwire.MilliSatoshi
 	outgoingMsat    lnwire.MilliSatoshi
 	incomingPeer    route.Vertex
-	outgoingPeer    route.Vertex
+	outgoingPeer    *route.Vertex
 	incomingCircuit circuitKey
 	outgoingCircuit circuitKey
 }
@@ -275,6 +319,11 @@ func (d *Db) insertHtlcResolution(ctx context.Context, htlc *HtlcInfo) error {
                 outgoing_htlc_index)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?);`
 
+	var outgoingPeer interface{}
+	if htlc.outgoingPeer != nil {
+		outgoingPeer = hex.EncodeToString(htlc.outgoingPeer[:])
+	}
+
 	_, err := d.db.ExecContext(
 		ctx, insert,
 		htlc.addTime.UnixNano(),
@@ -285,7 +334,7 @@ func (d *Db) insertHtlcResolution(ctx context.Context, htlc *HtlcInfo) error {
 		hex.EncodeToString(htlc.incomingPeer[:]),
 		htlc.incomingCircuit.channel,
 		htlc.incomingCircuit.htlc,
-		hex.EncodeToString(htlc.outgoingPeer[:]),
+		outgoingPeer,
 		htlc.outgoingCircuit.channel,
 		htlc.outgoingCircuit.htlc,
 	)
@@ -365,9 +414,10 @@ func (d *Db) ListForwardingHistory(ctx context.Context, start, end time.Time) (
 	var htlcs []*HtlcInfo
 	for rows.Next() {
 		var (
-			incomingPeer, outgoingPeer string
-			addTime, resolveTime       uint64
-			htlc                       HtlcInfo
+			incomingPeer         string
+			outgoingPeer         sql.NullString
+			addTime, resolveTime uint64
+			htlc                 HtlcInfo
 		)
 
 		err := rows.Scan(
@@ -394,9 +444,15 @@ func (d *Db) ListForwardingHistory(ctx context.Context, start, end time.Time) (
 			return nil, err
 		}
 
-		htlc.outgoingPeer, err = route.NewVertexFromStr(outgoingPeer)
-		if err != nil {
-			return nil, err
+		if outgoingPeer.Valid {
+			outgoingVertex, err := route.NewVertexFromStr(
+				outgoingPeer.String,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			htlc.outgoingPeer = &outgoingVertex
 		}
 
 		htlcs = append(htlcs, &htlc)
