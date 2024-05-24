@@ -90,7 +90,7 @@ and per-peer overrides can be configured via the web ui.
 * `queue`: Queue htlcs when limits are exceeded. Items are popped from the queue
   when the number of pending htlcs is below the maximum and the rate limit
   allows another forward. This mode penalizes upstream nodes for the bad traffic
-  that the deliver by locking up liquidity along the route. This may push
+  that they deliver by locking up liquidity along the route. This may push
   upstream nodes to install a firewall too and constrain the mishaving node.
 
   Even in case of circuit breaker malfunction, queue mode should never cause
