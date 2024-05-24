@@ -361,11 +361,14 @@ func (s *server) marshalFwdHistory(htlcs []*HtlcInfo) []*circuitbreakerrpc.Forwa
 				ShortChannelId: htlc.incomingCircuit.channel,
 				HtlcIndex:      uint32(htlc.incomingCircuit.htlc),
 			},
-			OutgoingPeer: htlc.outgoingPeer.String(),
 			OutgoingCircuit: &circuitbreakerrpc.CircuitKey{
 				ShortChannelId: htlc.outgoingCircuit.channel,
 				HtlcIndex:      uint32(htlc.outgoingCircuit.htlc),
 			},
+		}
+
+		if htlc.outgoingPeer != nil {
+			forward.OutgoingPeer = htlc.outgoingPeer.String()
 		}
 
 		rpcHtlcs[i] = forward
